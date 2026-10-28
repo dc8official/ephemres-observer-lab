@@ -1,0 +1,2191 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Observer Effect Lab</title>
+<style>
+  /* Colour tokens. Dark is the default; light is chosen by the header toggle or, on "Auto", by the
+     operating system. Every text/background pair is checked for WCAG AA contrast (4.5:1). The run
+     colours (--run-1..8) are a colour-blind-validated categorical palette, stepped per theme. */
+  :root {
+    color-scheme: dark;
+    --bg: #0d1117; --panel: #151b23; --panel2: #1c2430; --line: #2a3441; --text: #e6edf3; --muted: #8b98a8;
+    --text2: #cfd8e3; --good: #3ddc97; --bad: #ff6b6b; --accent: #7aa2ff; --hot: #ffd2a0; --sel: #18243a;
+    --basecol: rgba(122,162,255,.08); --primary: #2a4fd6; --primary-text: #ffffff;
+    --warn-bg: #3a3220; --warn-line: #c9a227; --warn-text: #ffe08a; --err-bg: #3a1f1f; --err-text: #ffb4b4;
+    --clock-a: #4c9aff; --clock-b: #ff9f43; --dg-wire: #243246; --dg-queue: #4a2d12; --dg-queue-text: #ffb36b;
+    --grid: rgba(255,255,255,.07);
+    --run-1: #3987e5; --run-2: #d95926; --run-3: #199e70; --run-4: #c98500;
+    --run-5: #d55181; --run-6: #008300; --run-7: #9085e9; --run-8: #e66767;
+  }
+  :root[data-theme="light"] {
+    color-scheme: light;
+    --bg: #f4f6f8; --panel: #ffffff; --panel2: #eef1f5; --line: #d3d9e1; --text: #17202b; --muted: #556170;
+    --text2: #2b3644; --good: #08703f; --bad: #b42323; --accent: #2456c8; --hot: #8a4300; --sel: #e3ecfb;
+    --basecol: rgba(36,86,200,.06); --primary: #2456c8; --primary-text: #ffffff;
+    --warn-bg: #fff4d1; --warn-line: #b08000; --warn-text: #4f3b00; --err-bg: #fde8e8; --err-text: #7a1515;
+    --clock-a: #2a78d6; --clock-b: #c25400; --dg-wire: #dde7f4; --dg-queue: #fde2c6; --dg-queue-text: #7d3f00;
+    --grid: rgba(0,0,0,.08);
+    --run-1: #2a78d6; --run-2: #eb6834; --run-3: #1baf7a; --run-4: #eda100;
+    --run-5: #e87ba4; --run-6: #008300; --run-7: #4a3aa7; --run-8: #e34948;
+  }
+  @media (prefers-color-scheme: light) {
+    :root:not([data-theme]) {
+      color-scheme: light;
+      --bg: #f4f6f8; --panel: #ffffff; --panel2: #eef1f5; --line: #d3d9e1; --text: #17202b; --muted: #556170;
+      --text2: #2b3644; --good: #08703f; --bad: #b42323; --accent: #2456c8; --hot: #8a4300; --sel: #e3ecfb;
+      --basecol: rgba(36,86,200,.06); --primary: #2456c8; --primary-text: #ffffff;
+      --warn-bg: #fff4d1; --warn-line: #b08000; --warn-text: #4f3b00; --err-bg: #fde8e8; --err-text: #7a1515;
+      --clock-a: #2a78d6; --clock-b: #c25400; --dg-wire: #dde7f4; --dg-queue: #fde2c6; --dg-queue-text: #7d3f00;
+      --grid: rgba(0,0,0,.08);
+      --run-1: #2a78d6; --run-2: #eb6834; --run-3: #1baf7a; --run-4: #eda100;
+      --run-5: #e87ba4; --run-6: #008300; --run-7: #4a3aa7; --run-8: #e34948;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  header { display: flex; align-items: center; gap: 12px; padding: 12px 20px; border-bottom: 1px solid var(--line); flex-wrap: wrap; position: sticky; top: 0; background: var(--bg); z-index: 5; }
+  header h1 { font-size: 17px; margin: 0; font-weight: 650; }
+  header .sub { color: var(--muted); font-size: 12px; }
+  .pill { padding: 2px 10px; border-radius: 999px; font-size: 12px; background: var(--panel2); border: 1px solid var(--line); }
+  .pill.running { color: var(--good); border-color: var(--good); }
+  .pill.error { color: var(--bad); border-color: var(--bad); }
+  input.invalid { border-color: var(--bad); outline: 2px solid var(--bad); outline-offset: 1px; }
+  .errtxt { color: var(--bad); }
+  /* minmax(0, 1fr): without it a grid column grows to its widest child (the comparison table) and the
+     whole page scrolls sideways on a narrow screen; with it, wide tables scroll inside their own box. */
+  main { padding: 16px 16px 48px; max-width: 1600px; margin: 0 auto; display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; }
+  main > *, .charts > * { min-width: 0; }
+  /* Phones: the header (tabs, section bar, memory line) would take a third of the screen if it stayed pinned, so it scrolls away. */
+  @media (max-width: 600px) { header { padding: 10px 16px; position: static; } nav.tabs { margin-left: 0; } }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
+  .panel > h2 { font-size: 12px; margin: 0 0 10px; color: var(--muted); font-weight: 650; letter-spacing: .05em; text-transform: uppercase; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .panel > h2 .ctl { margin-left: auto; text-transform: none; letter-spacing: 0; font-weight: 400; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .banner { border-radius: 8px; padding: 9px 13px; display: none; font-size: 13px; }
+  .banner.show { display: block; }
+  .banner.err { background: var(--err-bg); border: 1px solid var(--bad); color: var(--err-text); }
+  .banner.warn { background: var(--warn-bg); border: 1px solid var(--warn-line); color: var(--warn-text); }
+  .grid-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px 14px; }
+  /* align-content: start: a grid label otherwise stretches its rows to the tallest field in the form row,
+     so inputs next to a two-line field grow taller than their neighbours. */
+  label, .field { display: grid; gap: 4px; font-size: 12px; color: var(--muted); align-content: start; }
+  .lt { display: flex; gap: 6px; align-items: baseline; min-height: 17px; }      /* title line: text + live value */
+  .lt .val { margin-left: auto; }
+  input[type=text], input[type=number], select { background: var(--panel2); color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 0 8px; font: inherit; width: 100%; height: 34px; }
+  ::placeholder { color: var(--muted); opacity: 1; }
+  input[type=range] { width: 100%; height: 34px; margin: 0; accent-color: var(--accent); }
+  input[type=checkbox] { width: 16px; height: 16px; margin: 0; accent-color: var(--accent); }
+  .ctlrow { display: flex; gap: 8px 14px; align-items: center; min-height: 34px; color: var(--text); font-size: 13px; }
+  .ctlrow > input { flex: none; }
+  /* Section 1 groups, matching the sections of the controls table in the docs. */
+  .formgroups { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(460px, 100%), 1fr)); gap: 12px 24px; }
+  fieldset { border: 0; border-top: 1px solid var(--line); margin: 0; padding: 8px 0 0; min-width: 0; }
+  fieldset.wide { grid-column: 1 / -1; }
+  legend { padding: 0 8px 0 0; font-size: 12px; font-weight: 650; color: var(--text2); }
+  .grid-form.labels { grid-template-columns: minmax(170px, 240px) minmax(0, 1fr); }
+  @media (max-width: 600px) { .grid-form.labels { grid-template-columns: minmax(0, 1fr); } }
+  .val { color: var(--text); font-weight: 600; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 10px; }
+  button, a.btn { background: var(--panel2); color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 6px 11px; font: inherit; cursor: pointer; text-decoration: none; display: inline-block; }
+  button:hover:not(:disabled), a.btn:hover { border-color: var(--accent); }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+  button.primary { background: var(--primary); border-color: var(--primary); color: var(--primary-text); font-weight: 600; }
+  button.danger { border-color: var(--bad); color: var(--bad); }
+  button.small, a.btn.small { padding: 2px 8px; font-size: 12px; }
+  .progress { height: 8px; background: var(--panel2); border-radius: 4px; overflow: hidden; flex: 1; min-width: 140px; }
+  .progress > div { height: 100%; width: 0; background: var(--accent); transition: width .3s; }
+  .muted { color: var(--muted); }
+  .note { font-size: 12px; color: var(--muted); margin-top: 8px; }
+  table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+  th, td { padding: 5px 9px; border-bottom: 1px solid var(--line); text-align: right; white-space: nowrap; }
+  th:first-child, td:first-child { text-align: left; }
+  th { color: var(--muted); font-weight: 600; font-size: 12px; vertical-align: bottom; }
+  .scroll { overflow-x: auto; }
+  #runs td, #runs th { text-align: left; }
+  #runs tr.grp td { background: var(--panel2); color: var(--muted); font-size: 12px; padding: 4px 9px; }
+  #runs tr.sel td { background: var(--sel); }
+  #runs td.purpose { max-width: 340px; overflow: hidden; text-overflow: ellipsis; color: var(--text2); }
+  .chip { display: inline-block; width: 11px; height: 11px; border-radius: 3px; vertical-align: -1px; margin-right: 6px; }
+  #matrix th:first-child, #matrix td:first-child { position: sticky; left: 0; background: var(--panel); z-index: 1; }
+  #matrix th.run { text-align: right; min-width: 150px; white-space: normal; line-height: 1.25; }
+  #matrix th.run .nm { color: var(--text); font-weight: 650; }
+  #matrix tr.grp td { background: var(--panel2); color: var(--muted); font-size: 12px; letter-spacing: .05em; text-transform: uppercase; padding: 3px 9px; }
+  #matrix td.cell { position: relative; }
+  #matrix td.cell .bar { position: absolute; left: 0; bottom: 2px; height: 3px; opacity: .85; border-radius: 2px; }
+  #matrix td.cell .v { position: relative; }
+  #matrix td.cell .r { position: relative; color: var(--muted); font-size: 12px; margin-left: 6px; }
+  #matrix td.best .v { color: var(--good); font-weight: 650; }
+  #matrix td.worst .v { color: var(--bad); font-weight: 650; }
+  #matrix .mark { position: relative; font-size: 12px; margin-right: 4px; }   /* ▼ best / ▲ worst: not colour alone */
+  #matrix .lown { position: relative; color: var(--muted); font-size: 12px; margin-left: 4px; }
+  #matrix th.run .purpose { display: block; color: var(--text2); font-weight: 400; margin-top: 3px; white-space: normal; }
+  #matrix .basecol { background: var(--basecol); }
+  #matrix caption.sharedcap { caption-side: top; text-align: left; padding: 0 0 8px; color: var(--text2); font-size: 13px; }
+  #matrix tr.zerorow td { color: var(--muted); font-size: 12px; text-align: left; white-space: normal; }
+  /* The comparison scrolls inside its own box, so its column headers (and the metric column) stay in view. */
+  .matrixwrap { max-height: 75vh; overflow: auto; }
+  #matrix thead th { position: sticky; top: 0; background: var(--panel); z-index: 2; }
+  #matrix thead th:first-child { z-index: 3; }
+  .charts { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 1100px) { .charts { grid-template-columns: 1fr; } }
+  .chartbox { position: relative; height: 320px; }
+  .charts > .panel.wide { grid-column: 1 / -1; }
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 10px; }
+  .card { background: var(--panel2); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; }
+  .card .t { font-size: 12px; color: var(--muted); }
+  .card .v { font-size: 21px; font-weight: 650; margin-top: 2px; font-variant-numeric: tabular-nums; }
+  .card .s { font-size: 12px; color: var(--muted); }
+  tr.hot td { color: var(--hot); }
+  .engpick { display: flex; gap: 10px; flex-wrap: wrap; }
+  .engpick label { display: flex; gap: 6px; align-items: center; color: var(--text); font-size: 13px; padding: 4px 0; }
+  #matrix td.cell .rng { position: relative; display: block; color: var(--muted); font-size: 12px; }
+  .hint { font-size: 12px; color: var(--muted); }
+  ul.hostwarn { margin: 6px 0 0; padding-left: 18px; color: var(--text2); }
+  .notebox { display: flex; gap: 8px; align-items: center; margin: 0 0 10px; }
+  .notebox input { flex: 1; }
+  select#theme { width: auto; margin-left: auto; }
+  .panel > h2 .ctl { min-width: 0; max-width: 100%; }     /* long run labels must not widen the page */
+  .ctl select { max-width: 100%; min-width: 0; text-overflow: ellipsis; }
+  .nochart { display: none; color: var(--bad); font-size: 13px; }
+  nav.tabs { display: flex; gap: 4px; margin-left: 12px; }
+  nav.tabs button { border-radius: 6px 6px 0 0; border-bottom: 2px solid transparent; background: transparent; }
+  nav.tabs button.on { border-bottom-color: var(--accent); color: var(--text); background: var(--panel2); }
+  #view-docs { grid-template-columns: minmax(0, 1fr); max-width: 1000px; }
+  #doctoc { display: flex; flex-wrap: wrap; gap: 2px 10px; align-items: center; font-size: 13px; }
+  #doctoc b { color: var(--muted); font-weight: 600; margin-right: 6px; }
+  @media (min-width: 1200px) {     /* wide screens: the contents stay beside the text while you scroll */
+    #view-docs { grid-template-columns: 220px minmax(0, 1000px); max-width: 1260px; }
+    #doctoc { grid-column: 1; grid-row: 1 / span 40; position: sticky; top: 70px; align-self: start; flex-direction: column;
+              align-items: stretch; max-height: calc(100vh - 90px); overflow: auto; }
+    #view-docs > section { grid-column: 2; }
+  }
+  details.reftable > summary { cursor: pointer; color: var(--accent); padding: 4px 0; min-height: 24px; }
+  #view-docs[hidden], #view-lab[hidden] { display: none; }
+  .doc h2 { font-size: 20px; margin: 0 0 8px; color: var(--text); text-transform: none; letter-spacing: 0; }
+  .doc h3 { font-size: 15px; margin: 18px 0 6px; color: var(--text); }
+  .doc p, .doc li { color: var(--text2); max-width: 78ch; }
+  .doc ul, .doc ol { padding-left: 20px; }
+  .doc code { background: var(--panel2); padding: 1px 5px; border-radius: 4px; font-size: 12.5px; }
+  .doc table td, .doc table th { white-space: normal; text-align: left; vertical-align: top; }
+  .doc table { display: block; overflow-x: auto; }       /* wide tables scroll inside the panel on small screens */
+  .doc table.num td:not(:first-child), .doc table.num th:not(:first-child) { text-align: right; white-space: nowrap; }
+  .doc .callout { border-left: 3px solid var(--accent); background: var(--panel2); padding: 8px 12px; border-radius: 0 6px 6px 0; margin: 10px 0; }
+  .doc .callout.warn { border-left-color: #c9a227; }
+  .toc { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 13px; }
+  .toc a { color: var(--accent); text-decoration: none; }
+  .toc a:hover { text-decoration: underline; }
+  .doc table.ctltable td { font-size: 13px; }
+  .doc table.ctltable td:first-child { min-width: 140px; }
+  .gloss dt { font-weight: 650; margin-top: 10px; color: var(--text); }
+  .gloss dd { margin: 2px 0 0 0; color: var(--text2); max-width: 80ch; }
+  .gloss .tag { color: var(--muted); font-weight: 400; font-size: 12px; margin-left: 6px; }
+  svg.diagram { width: 100%; height: auto; background: var(--panel2); border: 1px solid var(--line); border-radius: 8px; }
+  svg.diagram text { fill: var(--text2); font-size: 13px; font-family: inherit; }
+  svg.diagram .dim { fill: var(--muted); font-size: 12px; }
+  .legend { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 12px; }
+  /* Accessibility: a clearly visible keyboard focus ring, and controls no smaller than 24 x 24 px (WCAG 2.2, 2.5.8). */
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  button.small, a.btn.small { min-height: 26px; }
+  #runs input[type=checkbox], #runs input[type=radio] { width: 20px; height: 20px; margin: 2px; }
+  input[type=checkbox] { width: 16px; height: 16px; }
+  /* Section bar (Lab) and contents list (Research): jump links that show where you are. */
+  nav.secnav { flex-basis: 100%; display: flex; gap: 4px 14px; flex-wrap: wrap; font-size: 13px; }
+  nav.secnav[hidden] { display: none; }
+  nav.secnav a, #doctoc a { color: var(--muted); text-decoration: none; padding: 3px 6px; border-radius: 5px; }
+  nav.secnav a:hover, #doctoc a:hover { color: var(--text); background: var(--panel2); }
+  nav.secnav a.on, #doctoc a.on { color: var(--text); background: var(--panel2); box-shadow: inset 2px 0 0 var(--accent); }
+  #view-lab > section, #view-docs > section { scroll-margin-top: 120px; }
+  @media (max-width: 600px) { #view-lab > section, #view-docs > section { scroll-margin-top: 12px; } }   /* header not pinned on phones */
+  /* Collapsible panels: the ▾/▸ button in a panel heading hides everything below the heading. */
+  .panel.collapsed > *:not(h2) { display: none !important; }
+  .panel > h2 button.fold { font-size: 12px; padding: 0 6px; min-height: 24px; }
+  #runs tr.grp button.fold { min-height: 24px; padding: 0 6px; margin-right: 6px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Observer Effect Lab</h1>
+  <span id="status" class="pill">connecting…</span>
+  <nav class="tabs">
+    <button id="tab-lab" class="on">Lab</button>
+    <button id="tab-docs">Research &amp; Methodology</button>
+  </nav>
+  <span class="sub" id="clockinfo"></span>
+  <nav class="secnav" id="labnav" aria-label="Sections of the Lab tab">
+    <a href="#sec-run">1 · Run</a><a href="#sec-runs">2 · Runs</a><a href="#sec-compare">3 · Comparison</a>
+    <a href="#sec-charts">Charts</a><a href="#sec-drill">4 · Drill-down</a></nav>
+  <span class="sub" id="meminfo" title="Memory held by the dashboard server. Saved runs' packets are released when needed and reloaded from disk; unsaved runs stay in memory until you save them or close the dashboard (then they are lost)."></span>
+  <select id="theme" title="Colour theme" aria-label="Colour theme">
+    <option value="auto">Theme: auto</option><option value="dark">Theme: dark</option><option value="light">Theme: light</option>
+  </select>
+</header>
+
+<main id="view-lab">
+  <div id="banner" class="banner err"></div>
+  <div id="nochart" class="nochart">Chart.js could not be loaded from server/static/vendor/chart.umd.min.js (file missing?). Tables still work.</div>
+
+  <section class="panel" id="sec-run">
+    <h2>1 · Run a test
+      <span class="ctl"><span class="hint">Presets:</span>
+        <button class="small" id="preset_ephemres" title="Reset every setting to Ephemres' own configuration">Ephemres defaults</button>
+        <button class="small" id="preset_burst" title="All endpoints start at once: the worst case (and it may overload the target)">Burst (0 s)</button></span></h2>
+    <!-- Values start at Ephemres' own configuration (the system under study); every change is a deliberate deviation.
+         Groups follow the sections of the controls table in Research & Methodology. -->
+    <div class="formgroups">
+      <fieldset>
+        <legend>Target &amp; engine</legend>
+        <div class="grid-form">
+          <label><span class="lt">Targets</span><input type="text" id="targets" value="" placeholder="e.g. 192.168.1.50" autocomplete="off">
+            <span class="hint">IPv4, comma-separated</span></label>
+          <label><span class="lt">Language engine</span>
+            <select id="engine">
+              <option value="python">Python (asyncio)</option>
+              <option value="go">Go (goroutines)</option>
+              <option value="rust">Rust (tokio)</option>
+            </select></label>
+          <label><span class="lt">CPU core mode</span>
+            <select id="cpumode">
+              <option value="single_core">Single-Core (1 CPU Pinned)</option>
+              <option value="multi_core">Multi-Core (ProcessPool / Multi-Thread)</option>
+            </select></label>
+          <label><span class="lt">NIC hardware timestamps</span>
+            <span class="ctlrow"><input type="checkbox" id="hw"><span>Use the NIC's clock</span></span>
+            <span class="hint">Python only. Off keeps engines comparable.</span></label>
+        </div>
+      </fieldset>
+      <fieldset>
+        <legend>Load model</legend>
+        <div class="grid-form">
+          <label><span class="lt">Virtual endpoints <span class="val" id="v_ep"></span></span><input type="range" id="endpoints" min="1" max="500" value="100"></label>
+          <label><span class="lt">Stagger window <span class="val" id="v_stagger"></span></span><input type="range" id="stagger" min="0" max="120" step="1" value="60"></label>
+          <label><span class="lt">db_write_semaphore <span class="val" id="v_sem"></span></span><input type="range" id="semaphore" min="1" max="100" value="15"></label>
+          <label><span class="lt">Simulated DB work <span class="val" id="v_db"></span></span><input type="range" id="dbms" min="0" max="15" step="0.5" value="3"></label>
+        </div>
+      </fieldset>
+      <fieldset>
+        <legend>Timing</legend>
+        <div class="grid-form">
+          <label><span class="lt">Pings per cycle</span><input type="number" id="pings" min="1" max="20" value="5"></label>
+          <label><span class="lt">Ping interval (s)</span><input type="number" id="interval" min="0.05" max="30" step="0.05" value="8"></label>
+          <label><span class="lt">Reply timeout (s)</span><input type="number" id="timeout" min="0.1" max="10" step="0.1" value="2"></label>
+          <label><span class="lt">Cycles per endpoint</span><input type="number" id="cycles" min="1" max="60" value="3"></label>
+          <label><span class="lt">Cycle length (s)</span><input type="number" id="cyclelen" min="1" max="600" step="1" value="60"></label>
+        </div>
+      </fieldset>
+      <fieldset>
+        <legend>Batch (repeated runs)</legend>
+        <div class="grid-form">
+          <label><span class="lt">Repeat (rounds)</span><input type="number" id="repeats" min="1" max="20" value="1"></label>
+          <div class="field" role="group" aria-labelledby="altlbl"><span class="lt" id="altlbl">Batch engines</span>
+            <span class="ctlrow engpick"><label><input type="checkbox" id="alt_python"> Python</label><label><input type="checkbox" id="alt_go"> Go</label><label><input type="checkbox" id="alt_rust"> Rust</label></span>
+            <span class="hint">Take turns each round. The language engine above is always included.</span></div>
+          <label><span class="lt">Idle floor every round</span>
+            <span class="ctlrow"><input type="checkbox" id="withfloor"><span>No-ORM run before each test run</span></span></label>
+        </div>
+      </fieldset>
+      <fieldset class="wide">
+        <legend>Labels</legend>
+        <div class="grid-form labels">
+          <label><span class="lt">Series tag</span><input type="text" id="tag" maxlength="24" placeholder="e.g. sem-sweep">
+            <span class="hint">Optional · added to the file name</span></label>
+          <label><span class="lt">What is this run checking?</span><input type="text" id="note" maxlength="300"></label>
+        </div>
+      </fieldset>
+    </div>
+    <div class="note" id="formnote"></div>
+    <div class="row">
+      <button class="primary" id="start">▶ Start run</button>
+      <button class="danger" id="stop" disabled>■ Stop</button>
+      <button id="floorbtn" title="Run this exact setup with NO ORM work. Its intrusion is the engine's idle floor; runs of the same setup can then be shown above it.">Measure idle floor</button>
+      <div class="progress" hidden><div id="bar"></div></div>
+      <span class="muted" id="progtxt"></span>
+      <span class="muted" id="batchinfo"></span>
+    </div>
+  </section>
+
+  <section class="panel" id="sec-runs">
+    <h2>2 · Choose runs to compare
+      <span class="ctl">
+        <input type="text" id="filter" aria-label="Filter runs by engine, target, tag or any setting" placeholder="filter (engine, target, tag…)" style="width:200px">
+        <label style="display:flex;gap:5px;align-items:center;font-size:12px"><input type="checkbox" id="groupby" checked> group by scenario</label>
+        <label style="display:flex;gap:5px;align-items:center;font-size:12px" title="Repeats of one setup (same batch, engine, CPU mode, role) become one column: median with the lowest-highest range"><input type="checkbox" id="combine" checked> combine repeats</label>
+        <button class="small" id="clearsel">Clear</button>
+        <button class="small" id="saveall">💾 Save all unsaved</button>
+      </span>
+    </h2>
+    <div class="row" style="margin:0 0 8px">
+      <label style="display:flex;gap:5px;align-items:center;font-size:13px;color:var(--text)"><input type="checkbox" id="managemode"> Manage results (save / delete)</label>
+      <span id="managebar" style="display:none;gap:8px;flex-wrap:wrap;align-items:center">
+        <button class="small" id="mg_all">Tick all shown</button>
+        <button class="small" id="mg_none">Untick all</button>
+        <button class="small" id="mg_save">💾 Save ticked</button>
+        <button class="small danger" id="mg_delete">🗑 Delete ticked…</button>
+        <span class="muted" id="mg_info"></span>
+      </span>
+    </div>
+    <div class="scroll"><table id="runs"></table></div>
+    <div class="note errtxt" id="selnote"></div>
+    <div class="note">Tick runs for up to 8 comparison columns (with "combine repeats", the repeats of one engine share a column). The ● column picks the baseline; the other runs are also shown as a multiple of it.
+      Runs in the same <b>scenario</b> asked the same question (same endpoints, schedule, semaphore, ORM time and target), so they compare like for like.</div>
+  </section>
+
+  <div id="warn" class="banner warn"></div>
+
+  <section class="panel" id="sec-compare">
+    <h2>3 · Comparison
+      <span class="ctl">
+        <label style="display:flex;gap:5px;align-items:center;font-size:12px"><input type="checkbox" id="showratio" checked> show × baseline</label>
+        <label style="display:flex;gap:5px;align-items:center;font-size:12px" title="Add rows: each run's intrusion minus the intrusion of the same setup measured with no ORM work (its idle floor)"><input type="checkbox" id="abovefloor"> subtract idle floor</label>
+        <label style="display:flex;gap:5px;align-items:center;font-size:12px">mark best/worst when they differ by
+          <select id="hlthr" style="width:auto"><option value="0">never</option><option value="5">≥ 5 %</option>
+            <option value="10" selected>≥ 10 %</option><option value="25">≥ 25 %</option><option value="50">≥ 50 %</option></select></label>
+        <a class="btn small" id="exp_cmp_md" href="#">⬇ Markdown</a>
+        <a class="btn small" id="exp_cmp_csv" href="#">⬇ CSV</a>
+      </span>
+    </h2>
+    <div class="scroll matrixwrap"><table id="matrix"></table></div>
+    <div class="note">▼ best and ▲ worst among the selected runs (lower is better for every marked row), shown only when they differ by at least the
+      chosen amount: smaller gaps between single runs are usually noise. With repeated runs, choose a threshold larger than the spread between repeats.
+      "few samples" marks a percentile the run has too few packets to support (p95 needs about 200, p99 about 1000). The thin bar under each value is
+      scaled within its row.</div>
+  </section>
+
+  <div class="legend" id="legend"></div>
+  <section class="charts" id="sec-charts">
+    <div class="panel">
+      <h2>Key metrics by run
+        <span class="ctl">
+          <select id="metricset" style="width:auto"></select>
+          <label style="display:flex;gap:5px;align-items:center;font-size:12px"><input type="checkbox" id="logbars" checked> log scale (dots)</label>
+        </span></h2>
+      <div class="chartbox"><canvas id="ch_bars"></canvas></div>
+      <div class="note">A percentile a run has too few packets for is left out, as in the table (p95 needs about 200, p99 about 1000).</div>
+    </div>
+    <div class="panel">
+      <h2>Intrusion at each percentile (log scale)</h2>
+      <div class="chartbox"><canvas id="ch_pct"></canvas></div>
+      <div class="note">Read it as "how long did the 95th-percentile packet wait". A curve that stays low and flat is a runtime that rarely makes packets wait; the right-hand end is the worst case.
+        The horizontal axis is tail-log: p90, p99 and p99.9 are equally spaced, so the tail gets the room. A percentile the run has too
+        few packets for is left out, and each run's max sits at log₁₀ n (the legend shows n).</div>
+    </div>
+    <div class="panel">
+      <h2>Kernel RTT at each percentile: the external effect (log scale)</h2>
+      <div class="chartbox"><canvas id="ch_kpct"></canvas></div>
+      <div class="note">The same axes as the intrusion chart, but for the kernel's own arrival clock (Clock A), which does not depend on when the
+        program read the reply. If this curve rises with the load, the probes themselves slowed the target or the wire: the external observer effect.
+        If only the intrusion curve rises, the delay is inside the monitor: the internal effect.</div>
+    </div>
+    <div class="panel">
+      <h2>Where the intrusion falls (share of packets)</h2>
+      <div class="chartbox"><canvas id="ch_hist"></canvas></div>
+      <div class="note">Shown as % of replied packets so runs with different loss are comparable. Left = the normal wake-up floor; right = packets that waited behind someone's ORM work.</div>
+    </div>
+    <div class="panel">
+      <h2>Intrusion over time (each dot is a packet)
+        <span class="ctl"><label style="display:flex;gap:5px;align-items:center;font-size:12px"><input type="checkbox" id="timeall"> all selected runs</label></span></h2>
+      <div class="note" style="margin:0 0 6px">Showing: <span id="timewhich"></span></div>
+      <div class="chartbox"><canvas id="ch_time"></canvas></div>
+      <div class="note">Dots stacked high at the same moment mean one stall hit many packets at once, typically a single ORM burst. X is milliseconds since the run's first ping.
+        The shaded bands are when the run picked in section 4 did its ORM work (inline: the CPU spin; Python multi-core: the offloaded job), so you can see each stall line up with its cause.</div>
+    </div>
+    <div class="panel">
+      <h2>How concentrated is the damage? (endpoints ranked by mean intrusion)</h2>
+      <div class="chartbox"><canvas id="ch_rank"></canvas></div>
+      <div class="note">A steep drop means a few unlucky endpoints take the hit; a flat curve means every endpoint suffers about equally.</div>
+    </div>
+    <div class="panel">
+      <h2>Spread across repeats
+        <span class="ctl"><select id="spreadmetric" style="width:auto"></select></span></h2>
+      <div class="chartbox"><canvas id="ch_spread"></canvas></div>
+      <div class="note" id="spreadnote">One dot per repeat, the wide dash is the median. If two columns' dots overlap, the difference between them is
+        within what simply repeating the run produces. Needs runs from a "Repeat" batch with "combine repeats" ticked.</div>
+    </div>
+    <div class="panel">
+      <h2>Scheduler canary during the run</h2>
+      <div class="chartbox"><canvas id="ch_canary"></canvas></div>
+      <div class="note errtxt" id="canarynote"></div>
+      <div class="note">Worst lateness of the 10 ms timer in each 0.5 s window: how long the runtime kept other work waiting.</div>
+    </div>
+    <div class="panel wide">
+      <h2>Sweep: a figure against one setting
+        <span class="ctl"><select id="sweepx" style="width:auto"></select><select id="sweepy" style="width:auto"></select></span></h2>
+      <div class="chartbox"><canvas id="ch_sweep"></canvas></div>
+      <div class="note errtxt" id="sweepnote"></div>
+      <div class="note">One dot per selected run (its colour and shape as in the legend) at the value of the chosen setting; the line joins the
+        median at each value, one line per engine (solid Python, dashed Go, dotted Rust; thin for multi-core). Select a series that changes one
+        setting, e.g. runs tagged <code>sem-sweep</code>, and leave the rest alone: the note above names any other setting that also differs.
+        Idle-floor runs are left out.</div>
+    </div>
+  </section>
+
+  <section class="panel" id="sec-drill">
+    <h2>4 · Drill into one run
+      <span class="ctl"><select id="focus" style="width:auto"></select>
+        <button class="small" id="save">💾 Save to test_results/</button>
+        <a class="btn small" id="exp_pk" href="#">⬇ Packets CSV</a>
+        <a class="btn small" id="exp_ep" href="#">⬇ Endpoints CSV</a>
+        <a class="btn small" id="exp_md" href="#">⬇ Report (MD)</a></span></h2>
+    <div class="note" id="runinfo" style="margin:0 0 10px"></div>
+    <div class="notebox"><label for="focusnote" class="muted" style="display:block">What this run checks:</label>
+      <input type="text" id="focusnote" maxlength="300" placeholder="e.g. does Go keep intrusion flat when the semaphore is raised to 50?">
+      <button class="small" id="savenote">Save note</button></div>
+    <div class="cards" id="cards"></div>
+    <div class="note" id="cardnote"></div>
+    <div class="note" id="hostinfo"></div>
+    <h2 style="margin-top:18px">Kernel vs observer RTT per endpoint, worst first
+      <span class="ctl"><select id="chmode" style="width:auto"><option value="stack">RTT stacked</option><option value="intr">Intrusion only</option></select></span></h2>
+    <div class="chartbox"><canvas id="ch_ep"></canvas></div>
+    <div class="note">Blue = RTT at kernel arrival. Orange on top = extra time the reply waited before this program read it (blue + orange = observer RTT).</div>
+    <h2 style="margin-top:18px">Worst-hit endpoints (top 10 by mean intrusion)</h2>
+    <div class="scroll" id="worst"></div>
+  </section>
+</main>
+
+<main id="view-docs" hidden class="doc">
+  <nav id="doctoc" aria-label="Contents of this page"></nav>
+  <section class="panel">
+    <h2>Research scope &amp; methodology</h2>
+    <p>This lab measures how much a monitoring program's <b>own busy-ness</b> distorts the network latency it reports, and compares how
+      Python (asyncio), Go and Rust cope. This page explains why and how it measures, then how to read the comparison table and the charts
+      (<a href="#d-compare">Reading the comparison table</a>, <a href="#d-charts">Reading the charts</a>), how to run a valid test, and every
+      control and metric.</p>
+  </section>
+
+  <section class="panel" id="d-question">
+    <h2>The question</h2>
+    <p>A monitor sends pings and reports how long each reply took. But between the moment a reply <i>arrives at the computer</i> and the moment
+      the program <i>reads it</i>, the reply waits in a queue inside the operating system. If the program is busy (for example preparing a database
+      write), the wait grows and the monitor reports a longer time than the network really had. That distortion is the <b>observer effect</b>.</p>
+    <p><b>The origin:</b> While operating Ephemres (the parent monitoring platform) on deployed Linux machines, manual command-line <code>ping</code>
+      tests from the terminal showed steady, low round-trip times, while the Ephemres application on the same machine reported a slight, regular RTT
+      discrepancy and periodic tail-latency spikes. Ephemres was originally designed and tested inside a <b>GNS3 simulated network environment</b> on
+      single-core (1 vCPU) Debian/Ubuntu machines, and as it grew, the most effective update specifically for improving ICMP accuracy was raising its
+      database-write semaphore from <b>4 to 15</b>. Before prematurely substituting Go or Rust into a working Python codebase, this lab was built to
+      measure the observer effect on <b>every packet</b> across runtimes, CPU core modes, and semaphore sizes.</p>
+    <p>It answers five questions:</p>
+    <ol>
+      <li>How large is the distortion for a single-threaded <code>asyncio</code> monitor (Ephemres' 1-vCPU baseline design) under realistic database-write load?</li>
+      <li>How does it change with the load: burst or staggered starts, endpoint count, semaphore size (testing the 4 → 15 tuning across 5, 15, 30, 50), and post-cycle CPU work?</li>
+      <li>How do Go (goroutines) and Rust (tokio) compare to Python (<code>asyncio</code>) under the same load, pinned to one core and free to use all cores?</li>
+      <li>What does Python gain, and what does it pay, when it moves the CPU work to <b>worker processes</b> (Python multi-core)?</li>
+      <li>How do schedule design, hardware scaling, and language runtime each relate to the observer error measured here, for Ephemres and for monitoring platforms with a similar asynchronous probing architecture?</li>
+    </ol>
+  </section>
+
+  <section class="panel" id="d-clocks">
+    <h2>The clocks: how every packet checks itself</h2>
+    <p>Instead of running a separate "control" ping at a different moment, every single reply is timestamped <b>twice</b>, by two clocks that
+      both read the system clock (so they can be subtracted):</p>
+    <svg class="diagram" viewBox="0 0 900 270" role="img" aria-label="Timeline of one ping from send to read, showing Clock A and Clock B">
+      <defs><marker id="arr" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" style="fill:var(--muted)"/></marker></defs>
+      <line x1="50" y1="140" x2="850" y2="140" style="stroke:var(--muted)" stroke-width="2" marker-end="url(#arr)"/>
+      <!-- send -->
+      <circle cx="70" cy="140" r="7" style="fill:var(--muted)"/>
+      <text x="70" y="170" text-anchor="middle">send ping</text><text x="70" y="187" text-anchor="middle" class="dim">tx = clock()</text>
+      <!-- wire -->
+      <rect x="120" y="128" width="250" height="24" rx="4" style="fill:var(--dg-wire)"/>
+      <text x="245" y="145" text-anchor="middle">network + target answers</text>
+      <!-- NIC hw -->
+      <circle cx="400" cy="140" r="6" fill="none" style="stroke:var(--muted)" stroke-width="2" stroke-dasharray="3 2"/>
+      <text x="400" y="106" text-anchor="middle" class="dim">(optional) NIC hardware stamp</text>
+      <text x="400" y="122" text-anchor="middle" class="dim">other clock, cross-check only</text>
+      <!-- clock A -->
+      <circle cx="470" cy="140" r="9" style="fill:var(--clock-a)"/>
+      <text x="470" y="170" text-anchor="middle" style="fill:var(--clock-a);font-weight:700">Clock A</text>
+      <text x="470" y="187" text-anchor="middle" class="dim">kernel stamps the arrival</text>
+      <!-- queue -->
+      <rect x="490" y="128" width="270" height="24" rx="4" style="fill:var(--dg-queue)"/>
+      <text x="625" y="145" text-anchor="middle" style="fill:var(--dg-queue-text)">reply waits in the kernel queue</text>
+      <!-- clock B -->
+      <circle cx="780" cy="140" r="9" style="fill:var(--clock-b)"/>
+      <text x="780" y="170" text-anchor="middle" style="fill:var(--clock-b);font-weight:700">Clock B</text>
+      <text x="780" y="187" text-anchor="middle" class="dim">program reads the packet</text>
+      <!-- brackets -->
+      <path d="M70 60 V50 H470 V60" fill="none" style="stroke:var(--clock-a)" stroke-width="2"/>
+      <text x="270" y="42" text-anchor="middle" style="fill:var(--clock-a)">kernel RTT  =  A − tx   (the reference round trip)</text>
+      <path d="M470 80 V70 H780 V80" fill="none" style="stroke:var(--clock-b)" stroke-width="2.5"/>
+      <text x="625" y="64" text-anchor="middle" style="fill:var(--clock-b);font-weight:700">observer lag  =  B − A   (the error)</text>
+      <path d="M70 215 V225 H780 V215" fill="none" style="stroke:var(--muted)" stroke-width="2"/>
+      <text x="425" y="245" text-anchor="middle">observer RTT  =  B − tx   (what the monitor reports)  =  kernel RTT + observer lag</text>
+    </svg>
+    <ul>
+      <li><b>Clock A (kernel)</b>: the operating system records the arrival time and hands it over with the packet (a "control message" returned by
+        <code>recvmsg</code>). It is fixed when the packet arrives, so it does not depend on what the program is doing. It is the lab's reference.</li>
+      <li><b>Clock B (observer)</b>: the program's own clock, read the instant its read call returns: <code>clock_gettime_ns(CLOCK_REALTIME)</code>
+        in Python, <code>time.Now()</code> in Go, <code>clock_gettime</code> in Rust.</li>
+      <li><b>Optional hardware stamp</b>: on a real network card the chip can stamp the frame itself. It is on a different clock, so it is never subtracted from
+        A or B; it only lets you cross-check a row against <code>tcpdump</code>.</li>
+    </ul>
+    <p>The ping's <code>icmp_id</code> and <code>icmp_seq</code> are echoed back by any target (RFC 792), which lets one socket serve hundreds of
+      <b>virtual endpoints</b> pinging the same address: each endpoint gets its own identifier.</p>
+    <div class="callout">Kernel RTT is the reference, not a perfect "true" RTT: <code>tx</code> is read by the program just before it sends,
+      so kernel RTT also contains the send call (a few µs; more if the program is paused right there). Observer lag is unaffected because
+      <code>tx</code> cancels out; error % is slightly understated by the larger denominator.</div>
+  </section>
+
+  <section class="panel" id="d-effects">
+    <h2>Internal vs external observer effect</h2>
+    <p>Two different things can inflate a monitor's numbers, and the lab tells them apart <i>because</i> Clock A is immune to the first:</p>
+    <table>
+      <thead><tr><th></th><th>Internal effect</th><th>External effect</th></tr></thead>
+      <tbody>
+        <tr><td>What happens</td><td>the monitor's own CPU work delays <i>when it reads</i> a reply</td><td>the monitor's probe load changes <i>what is being measured</i> (target queues, rate limits, loss)</td></tr>
+        <tr><td>The true RTT</td><td>unchanged</td><td>changed</td></tr>
+        <tr><td>Where you see it</td><td>observer lag (B − A)</td><td>kernel RTT rises and packets are lost</td></tr>
+        <tr><td>Triggered by</td><td>ORM work blocking the loop; many endpoints finishing together</td><td>starting many endpoints at once (burst)</td></tr>
+        <tr><td>Remedy</td><td>different concurrency model, offloading the work, smaller bursts</td><td>spreading starts over a stagger window</td></tr>
+        <tr><td>Chart on the Lab tab</td><td>intrusion percentiles, intrusion over time</td><td>kernel RTT percentiles</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section class="panel" id="d-db">
+    <h2>Why simulated database work matters</h2>
+    <p>A real asynchronous database write has two phases:</p>
+    <ol>
+      <li><b>Waiting for the database</b> (network I/O). The program says "wake me when it answers" and the event loop goes on serving other work, including reading replies. This does <i>not</i> block.</li>
+      <li><b>Preparing the write</b> (CPU). Before sending anything the program computes statistics, evaluates state transitions, builds ORM objects and serialises SQL parameters.
+        This is ordinary computation that <b>keeps the thread busy</b>: nothing else on that thread runs until it finishes.</li>
+    </ol>
+    <p>Only phase 2 can delay reply reading, so that is what the lab simulates: a deterministic CPU spin of <i>Simulated DB work</i> milliseconds, limited to
+      <i>db_write_semaphore</i> endpoints at a time, followed by a short sleep for phase 1. A spin instead of a real database removes disk and database
+      variability, so any lag you see is scheduling contention inside the program, nothing else.</p>
+    <p>That is also why the engines differ: a single-threaded loop stops reading replies for the whole spin; Go and Rust with spare threads can keep reading while one thread spins;
+      Python can move the spin to other processes, at the price of copying the data across the process boundary.</p>
+  </section>
+
+  <section class="panel" id="d-modes">
+    <h2>Two-tier architecture &amp; the experiment matrix (engines × CPU core modes)</h2>
+    <h3>Two-tier system architecture &amp; engine parity</h3>
+    <p>To prevent the web dashboard from contaminating microsecond packet measurements, the lab splits execution across two isolated tiers
+      (detailed in <code>docs/03-architecture.md</code> and <code>docs/04-engines.md</code>):</p>
+    <ul>
+      <li><b>Tier 1 (Harness &amp; Supervisory Server, <code>server/app.py</code>):</b> Runs in its own process on unpinned cores, launches one isolated
+        child probe process per run, consumes live NDJSON telemetry over <code>stdout</code> without blocking the probe, computes all statistics in one
+        shared pipeline (<code>server/analysis.py</code>), and guarantees fail-safe process and NIC cleanup on exit.</li>
+      <li><b>Tier 2 (Probing Engine Runtimes: Python, Go, Rust):</b> Each engine multiplexes up to 500 virtual endpoints (each identified by
+        <code>0x1000 + i</code>) over a single non-blocking 8 MiB raw ICMP socket (<code>SOCK_RAW</code>), extracts kernel <code>SCM_TIMESTAMPING</code>
+        control messages (Clock A) via <code>recvmsg</code>, records user-space wake-up time (Clock B) immediately after, and runs a gated 10 ms scheduler
+        canary alongside the semaphore-gated post-cycle CPU spin.</li>
+    </ul>
+    <h3>Why we test both Single-Core and Multi-Core modes</h3>
+    <p>Every engine runs in two <b>CPU core modes</b>, so one comparison covers six combinations. The packets, schedule, simulated work and
+      analysis are identical; only <i>where</i> the CPU work runs changes:</p>
+    <ul>
+      <li><b>Single-Core (1-vCPU GNS3 baseline):</b> Ephemres was originally designed and tested inside a <b>GNS3 simulated network environment</b>
+        running on resource-constrained <b>Debian/Ubuntu virtual machines with a single CPU core (1 vCPU)</b>. Pinning the probe process to a single core
+        models that mandatory 1-vCPU operational constraint.</li>
+      <li><b>Multi-Core (scaling across modern hardware):</b> Tests whether giving Go (<code>GOMAXPROCS</code> across all cores) and Rust
+        (multi-threaded work-stealing <code>tokio</code>) spare OS threads, or offloading Python's CPU work to a <code>ProcessPoolExecutor</code>, eliminates
+        event-loop and reader starvation when bursts collide.</li>
+    </ul>
+    <table>
+      <thead><tr><th>Engine</th><th>Single-Core (1 CPU pinned: 1-vCPU GNS3 baseline)</th><th>Multi-Core</th><th>What the comparison shows</th></tr></thead>
+      <tbody>
+        <tr><td>Python (asyncio)</td><td>one thread does everything: while it spins through the ORM work, no reply is read</td>
+          <td>the event loop stays pinned to its core; the ORM work is sent to a <b>pool of worker processes</b> (one per CPU minus one)</td>
+          <td>how much offloading removes the stall, and what the hand-over costs</td></tr>
+        <tr><td>Go (goroutines)</td><td><code>GOMAXPROCS=1</code>: the reader goroutine competes with the spinning ones for one thread</td>
+          <td>goroutines spread over every core; the reader can run while others spin</td><td>the Go scheduler with and without spare threads</td></tr>
+        <tr><td>Rust (tokio)</td><td>current-thread runtime: like asyncio, one thread</td>
+          <td>multi-thread runtime: a worker per core, work stealing</td><td>compiled code, no garbage collector, with and without spare threads</td></tr>
+      </tbody>
+    </table>
+    <div class="callout"><b>Methodological note (Event-loop blocking vs. Garbage Collection):</b> Literature on Python and Go tail latency
+      highlights two distinct runtime overheads: (1) synchronous CPU work starving a cooperative event loop or thread scheduler, and (2) stop-the-world
+      Garbage Collection pauses triggered by heap object allocations. Because this lab models the post-cycle ORM step as a <b>deterministic 3.0 ms CPU
+      spin</b> rather than allocating thousands of temporary heap objects, it directly measures <b>scheduler and event-loop contention</b>.</div>
+    <h3>How Python multi-core is measured</h3>
+    <p>Python multi-core is monitored exactly like every other mode (both clocks on every packet, the canary, send lag, loss by cause), plus
+      instruments specific to offloading:</p>
+    <ul>
+      <li><b>Observer intrusion</b> tests whether moving the 3 ms CPU spin off the event-loop thread lowers packet-reading delay, or whether baseline
+        socket I/O and IPC serialisation keep intrusion bounded by the event loop itself.</li>
+      <li><b>ORM offload overhead (IPC + pool wait)</b>: for every cycle, the time the hand-over took beyond the work itself, i.e. copying
+        (pickling) the data to a worker process, waiting for a free worker, and getting the result back. It is a row of the comparison table and a
+        card in the drill-down; it is "n/a" in every other mode.</li>
+      <li><b>The pickling runs on helper threads inside the probe process</b>, which take turns with the event loop for Python's interpreter lock
+        (the GIL). That is why Python multi-core is not free: it can still delay reading replies, and the intrusion and canary show by how much.</li>
+      <li><b>ORM-work shading</b> marks the offloaded jobs (hand-over to result). In this mode the stacks of high-lag dots should <i>not</i> line up
+        with the shaded bands: if they still do, the hand-over itself is what delays the replies.</li>
+    </ul>
+    <div class="callout warn"><b>Pool size versus semaphore.</b> The pool has one worker per CPU minus one (7 on an 8-CPU machine), while the
+      Ephemres semaphore (expanded in production from <code>4</code> to <code>15</code> specifically to improve ICMP accuracy) lets 15 endpoints into the
+      database step at once. The extra jobs queue for a worker, so with the Ephemres defaults the offload overhead under burst includes <i>waiting for a
+      worker</i>, not only the copying. To measure the pure hand-over cost, run a variation with <code>db_write_semaphore</code> at or below the pool size
+      (e.g. 7), and say so in the note.</div>
+    <p>The comparison is deliberately not perfectly symmetrical: in Go and Rust multi-core the CPU work shares memory with the reader, while Python's
+      crosses a process boundary. That difference is part of what is being compared.</p>
+  </section>
+
+  <section class="panel" id="d-compare">
+    <h2>Reading the comparison table</h2>
+    <p>Section 3 of the Lab tab puts the selected runs side by side: one <b>column</b> per run, one <b>row</b> per figure. Every figure is computed
+      on the server from the per-packet timestamps, the same way for all three engines, with the warm-up cycle left out.</p>
+    <h3>What a column is</h3>
+    <ul>
+      <li><b>One run</b>, or with <b>combine repeats</b> on, <b>one group of repeats</b> (the runs of one batch with the same engine, CPU mode and role).
+        A group's cell shows the <b>median</b> of its repeats with the <b>lowest to highest</b> repeat underneath. The median is the figure to quote;
+        the range is how much simply repeating the run moves it.</li>
+      <li>The <b>baseline</b> is the column picked with ● in section 2 (by default the first test run, never an idle-floor run). With
+        <b>show × baseline</b>, every other cell also shows its value as a multiple of the baseline's: ×2.0 means twice the baseline's value.</li>
+      <li>The thin bar under a value is its size relative to the largest value in that row, so you can scan a row without reading every number.</li>
+    </ul>
+    <h3>What the rows answer</h3>
+    <table>
+      <thead><tr><th>Row group</th><th>Rows</th><th>The question it answers</th><th>Watch out for</th></tr></thead>
+      <tbody>
+        <tr><td>Volume</td><td>packets sent, measured (n), lost, and loss by cause</td><td>Did the run collect enough data, and was anything lost because of the observer?</td>
+          <td><i>n</i> is the sample size behind every percentile. "Reply in time, read too late" is loss caused by the monitor itself; "no reply" is the network or target.</td></tr>
+        <tr><td>Wire (Clock A)</td><td>kernel RTT mean, kernel cycle jitter</td><td>What did the network really do? This is the reference.</td>
+          <td>If kernel RTT differs between runs of the same target, the load changed the network (the <i>external</i> effect), and the runs do not share a baseline.</td></tr>
+        <tr><td>Observer (Clock B)</td><td>observer RTT mean, observer cycle jitter</td><td>What would the monitor have reported?</td>
+          <td>Observer RTT = kernel RTT + intrusion. Compare the two jitters: a bigger observer jitter means the monitor invents variation that the network did not have.</td></tr>
+        <tr><td>Observer intrusion</td><td>mean, p50, p95, p99, max; error % four ways</td><td><b>The main result:</b> how long replies waited for the program, and how big that is next to the real RTT.</td>
+          <td>Quote <b>p95</b> and the <b>primary error %</b> (total lag ÷ total kernel RTT). The mean hides rare long waits; the max is a single packet and is noisy.</td></tr>
+        <tr><td>Above the idle floor</td><td>the intrusion rows minus the matching floor run's (with <b>subtract idle floor</b>)</td><td>How much does the CPU work add, beyond what the runtime needs just to notice a reply?</td>
+          <td>Needs a floor run of the same setup. A small negative value means "within noise", not a gain.</td></tr>
+        <tr><td>Send side</td><td>send lag mean, p95, max</td><td>Did the busy program also send its pings late?</td>
+          <td>Send lag does not change the RTT, but bends the probing schedule. Each runtime has its own timer floor: compare increases, not raw values.</td></tr>
+        <tr><td>Socket queue</td><td>reader wakeups, packets per wakeup, max queue depth</td><td><i>Why</i> was there intrusion: did replies pile up in the kernel?</td>
+          <td>Packets per wakeup ≈ 1 means a prompt reader. A max queue depth of 10 means ten replies were waiting at once.</td></tr>
+        <tr><td>Runtime</td><td>canary avg, p95, max; ORM offload overhead; dashboard stream cost</td><td>How long did the runtime keep <i>any</i> work waiting, and what did offloading cost?</td>
+          <td>The canary is independent of network traffic. Offload overhead exists only for Python multi-core and includes waiting for a free worker.</td></tr>
+      </tbody>
+    </table>
+    <h3>The marks: ▼ best and ▲ worst</h3>
+    <ul>
+      <li>Only rows where <b>lower is better</b> are marked, and only when the best and worst columns differ by at least the chosen threshold
+        (10 % by default; 5-50 %, or never). Smaller gaps between single runs are usually noise.</li>
+      <li>With repeats there is a second condition: the best column's <i>highest</i> repeat must be below the worst column's <i>lowest</i> repeat.
+        If the ranges overlap, the difference is within run-to-run noise and nothing is marked.</li>
+      <li>How much a mark means depends on the number of repeats: with 5 or more per column, non-overlapping ranges are evidence (p ≈ 0.008);
+        with 3 they are a hint worth repeating (p = 0.10). See <a href="#d-valid">Running a valid test</a>.</li>
+      <li>Idle-floor columns and the above-floor rows are never marked, and neither is error % of a run whose median kernel RTT is under 100 µs (shown as
+        "n/m (RTT too small)"). Colours are never the only signal: every mark is also a ▼ or ▲.</li>
+    </ul>
+    <h3>Flags that change how far a number can be trusted</h3>
+    <ul>
+      <li><b>few samples</b>: a percentile needs about 10 ÷ (1 − q) packets, i.e. about 200 for p95 and 1000 for p99. Below that the value is
+        really one of the largest packets, not a percentile. The charts leave such points out.</li>
+      <li><b>Not like for like</b> (the yellow banner): the selected runs differ in a setting other than the engine (endpoints, schedule, semaphore,
+        ORM time, pings, interval, cycles, cycle length, timeout, NIC stamps or target). A difference in the results may then come from that setting.
+        For a deliberate sweep of one setting use the sweep chart, which says which <i>other</i> settings also differ.</li>
+      <li><b>Scenario</b> groups in section 2 collect the runs that asked the same question (same endpoints, schedule, semaphore, ORM time and target):
+        ticking runs from one group keeps the comparison like for like.</li>
+    </ul>
+    <p>The <b>⬇ Markdown</b> and <b>⬇ CSV</b> buttons export exactly this table, with each run's note, for reports.</p>
+  </section>
+
+  <section class="panel" id="d-charts">
+    <h2>Reading the charts</h2>
+    <p>The table gives one number per figure; the charts show the <b>shape</b> behind it: how the waits are distributed, when they happened,
+      who suffered, and whether a difference survives repeating the run. Every chart overlays the selected runs, each with a fixed colour
+      <b>and</b> marker shape (● ▲ ■ ◆ …) shown in the legend strip above the charts. Charts that span microseconds to tens of milliseconds use a
+      log axis, labelled at 1, 2 and 5 of each decade.</p>
+    <h3>A reading order</h3>
+    <ol>
+      <li><b>Check the inputs.</b> The banner is clear (like for like), each run has enough packets (<i>n</i> in the legend), and loss is low.</li>
+      <li><b>Headline:</b> the table's intrusion p95 and primary error %, or <i>Key metrics by run</i> for a quick picture.</li>
+      <li><b>Is it real?</b> <i>Spread across repeats</i>: if the dots of two columns overlap, no difference is shown.</li>
+      <li><b>Internal or external?</b> Compare <i>Intrusion at each percentile</i> with <i>Kernel RTT at each percentile</i>.</li>
+      <li><b>Where does it come from?</b> <i>Intrusion over time</i> with the ORM-work shading, and the socket-queue rows of the table.</li>
+      <li><b>Who pays?</b> <i>How concentrated is the damage</i>.</li>
+      <li><b>How does it grow with the load?</b> The <i>Sweep</i> across a series that changes one setting.</li>
+    </ol>
+    <h3>Chart by chart</h3>
+    <table>
+      <thead><tr><th>Chart</th><th>What is plotted</th><th>How to read it</th><th>Watch out for</th></tr></thead>
+      <tbody>
+        <tr><td><b>Key metrics by run</b></td><td>A chosen set of summary figures per run (intrusion mean/p95/p99/max, RTT, jitter, send lag, canary).
+          Dots on the log axis, bars on the linear one.</td>
+          <td>A quick headline: which run is lower on each figure, and by roughly how much.</td>
+          <td>On a log axis equal steps are equal <i>ratios</i>. A missing p95 or p99 dot means the run has too few packets for it.</td></tr>
+        <tr><td><b>Intrusion at each percentile</b></td><td>Observer lag at min, p10 … p99.9 and max, one line per run. The x axis is
+          "tail-log": p90, p99 and p99.9 are equally spaced; a run's max sits at log₁₀ <i>n</i>.</td>
+          <td>Low and flat = replies rarely wait. The left part is the runtime's wake-up floor; the right part is the worst case.
+            Lines that only part at the right differ in their tails, not in typical behaviour.</td>
+          <td>Percentiles a run has too few packets for are left out, so a short run's line ends early.</td></tr>
+        <tr><td><b>Kernel RTT at each percentile</b></td><td>The same curve for the kernel's own arrival time (Clock A), on the same x range.</td>
+          <td>This is the network's behaviour, untouched by the program. Rising with the load (e.g. burst vs staggered) = the probes slowed the target or
+            the wire: the <i>external</i> effect. Flat while the intrusion curve rises = the delay is inside the monitor: the <i>internal</i> effect.</td>
+          <td>Runs against different targets have different curves for reasons unrelated to the monitor.</td></tr>
+        <tr><td><b>Where the intrusion falls</b></td><td>The share of replied packets in each lag bucket (&lt;50 µs … &gt;50 ms).</td>
+          <td>A tall left-hand peak = most packets read at the wake-up floor. Bars on the right = packets that waited behind someone's ORM work.
+            A second hump shows a distinct blocking mechanism.</td>
+          <td>Bucket widths differ (they roughly double); the bars are shares, so runs with different loss compare fairly.</td></tr>
+        <tr><td><b>Intrusion over time</b></td><td>One dot per packet: time since the run's first ping against its lag. Shaded bands: when the run
+          picked in section 4 did its ORM work.</td>
+          <td>Dots stacked high at one moment = one stall hit many packets at once. Stacks inside the shaded bands = the ORM work caused them.
+            For Python multi-core the stacks should <i>not</i> line up with the bands; if they do, the hand-over itself is the cause.</td>
+          <td>Shading is drawn for one run only (the drill-down's). Very long runs are thinned, but the 200 largest lags are always kept.</td></tr>
+        <tr><td><b>How concentrated is the damage</b></td><td>Endpoints ranked by mean intrusion, worst to best; x is the rank as a % of the run's endpoints.</td>
+          <td>A steep drop at the left = a few unlucky endpoints take the hit (their pings overlapped someone's ORM work). A flat line = everyone suffers equally.</td>
+          <td>Each endpoint's mean rests on few packets (pings × measured cycles), so the exact rank of one endpoint is noisy; read the shape.</td></tr>
+        <tr><td><b>Spread across repeats</b></td><td>One dot per repeat of each column for a chosen figure, with a dash at the median (2+ repeats only).</td>
+          <td>Dots of two columns that overlap = the difference is within what repeating the run produces. Clearly separated dots = a difference
+            (evidence with 5+ repeats each).</td>
+          <td>Needs a Repeat batch and <b>combine repeats</b>; a single run is one dot and says nothing about spread.</td></tr>
+        <tr><td><b>Scheduler canary</b></td><td>The worst lateness of a 10 ms timer in each 0.5 s window, per run.</td>
+          <td>The runtime's own view of how long it kept other work waiting, with or without network traffic. Peaks should line up with stacks in the
+            over-time chart.</td>
+          <td>Each runtime has a different idle floor (Rust about 1 ms): compare increases. Runs imported from the terminal runner have no timeline.</td></tr>
+        <tr><td><b>Sweep</b></td><td>A chosen figure (y) against one setting (x: endpoints, stagger, semaphore, ORM ms, pings, interval or cycle
+          length), one dot per selected test run, a line through the median per engine.</td>
+          <td>The dose-response view: does the effect grow with the load, from which value, and does one engine stay flat while another climbs?</td>
+          <td>Valid only when <i>one</i> setting changes; the note names any other setting that also differs. Idle-floor runs are left out.</td></tr>
+      </tbody>
+    </table>
+    <h3>Which evidence answers which question</h3>
+    <table>
+      <thead><tr><th>Question</th><th>Select</th><th>Look at</th></tr></thead>
+      <tbody>
+        <tr><td>1. How large is the distortion for Python single-core?</td><td>a Python single-core batch at the Ephemres defaults</td>
+          <td>Intrusion p95 and primary error % (table), the intrusion percentile curve, the over-time chart for the cause</td></tr>
+        <tr><td>2. How does it change with the load?</td><td>a series that changes one setting (tag it, e.g. <code>sem-sweep</code>)</td>
+          <td>The sweep; kernel RTT percentiles to separate internal from external effects (burst vs staggered)</td></tr>
+        <tr><td>3. How do Go and Rust compare to Python (<code>asyncio</code>) under the same load?</td><td>one batch with all three engines ticked, per CPU core mode, with Python as the ● baseline</td>
+          <td>Spread across repeats, the ▼/▲ marks, the intrusion percentile curve; subtract the idle floor if the engines' wake-up costs differ</td></tr>
+        <tr><td>4. What does Python gain, and pay, by offloading?</td><td>Python single-core and Python multi-core of the same setup</td>
+          <td>Intrusion rows (the gain), ORM offload overhead and canary (the price), over-time stacks vs shading (whether the hand-over still blocks)</td></tr>
+        <tr><td>5. What do these results mean for Ephemres and similar platforms?</td><td>single-core vs multi-core batches across staggered and burst schedules, plus their idle floors</td>
+          <td>Idle floors vs loaded runs (what cannot be eliminated without <code>Clock A</code>), single-core vs multi-core scaling per engine, and Pings 1–4 vs Ping 5 trade-offs</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section class="panel" id="d-valid">
+    <h2>Running a valid test</h2>
+    <p>The full step-by-step protocol, with the host preparation, is <a href="#d-replicate">Replicating the experiment</a> below; these are the rules behind it.</p>
+    <ol>
+      <li><b>Check the target first</b> with an ordinary <code>ping</code>: it should answer with no loss. The lab host's address must be in the same network as the target, otherwise the pings go to a gateway.</li>
+      <li><b>Start from the Ephemres defaults</b> (the form's starting values: 100 endpoints, 5 pings 8 s apart, starts spread over 60 s, 3 cycles). Change one setting at a time and write in the note what that change is testing. Use burst only to see the worst case, because a burst can overload the target and change the real RTT (the external effect).</li>
+      <li><b>Check the host conditions</b> shown with each run (CPU governor, deep sleep states, other load, NIC interrupts). Close other applications, and compare only runs taken under the same conditions.</li>
+      <li><b>Leave NIC hardware timestamps off</b> for any run you want to compare across engines: only Python can use them, and they change a setting on the network card.</li>
+      <li><b>Compare like with like.</b> Tick runs from the same <i>scenario</i> group; the page warns when selected runs differ in endpoints, schedule, semaphore, ORM time, pings, interval, cycles, cycle length, timeout, NIC hardware stamps or target.</li>
+      <li><b>Repeat: 5 rounds for a claim.</b> Which endpoints collide is not fixed, so one run is an anecdote. The <i>run</i> is the unit of replication, not the packet: packets of one run share the same stalls, so their count does not make a result more certain. If every repeat of one engine beats every repeat of another, the chance of that happening with no real difference is 10 % with 3 repeats each but under 1 % with 5. So use Repeat 5 to report a difference; 3 is a first look.</li>
+      <li><b>Loopback (127.0.0.1) is only a functional check.</b> The true RTT is a few microseconds, so error percentages look enormous.</li>
+      <li><b>Quote the primary error %.</b> The headline error is the total intrusion divided by the total kernel RTT (the share of all measured time that was error); the per-endpoint table uses the same definition. The per-packet median and mean are secondary: the mean can be dominated by one packet with a tiny RTT.</li>
+      <li><b>Measure the idle floor</b> of a setup (the "Measure idle floor" button: the same run with no ORM work) when you want to compare engines whose wake-up overhead differs; then tick "subtract idle floor" in the comparison. Raw figures stay the default.</li>
+    </ol>
+    <h3>What can distort a result</h3>
+    <table>
+      <thead><tr><th>Threat</th><th>What it does</th><th>What to do</th></tr></thead>
+      <tbody>
+        <tr><td>CPU sleep states (C-states)</td><td>an idle core sleeps deeply and wakes up to ~1 ms late; a lightly loaded run can look <i>worse</i> than a busy one</td><td>limit deep states for a session; compare runs taken under the same conditions</td></tr>
+        <tr><td>CPU frequency (powersave governor, turbo)</td><td>the same work takes a different time from run to run</td><td>use the <code>performance</code> governor while measuring</td></tr>
+        <tr><td>NIC interrupts on the probe core, a busy SMT sibling, other programs</td><td>they take turns with the measured program on its CPU</td><td>steer NIC interrupts away, keep the sibling idle, close other applications</td></tr>
+        <tr><td>Burst overloading the target</td><td>kernel RTT rises and packets are lost because of the test itself (external effect)</td><td>prefer staggered starts; from a burst, trust only the lag figures</td></tr>
+        <tr><td>Run-to-run variation and drift</td><td>one run can be lucky; the machine warms up over an hour</td><td>batches of 5 rounds with the engine order rotated; compare medians and ranges</td></tr>
+        <tr><td>Very short round trips (&lt; 100 µs)</td><td>an ordinary wake-up is already 100 % of the RTT</td><td>error % is shown as "n/m"; judge the lag in µs</td></tr>
+      </tbody>
+    </table>
+    <p>Every one of these except the burst is recorded with each run as its <b>host conditions</b>, with a warning in the drill-down.</p>
+  </section>
+
+  <section class="panel" id="d-replicate">
+    <h2>Replicating the experiment</h2>
+    <p>Everything needed to repeat the engine comparison on another machine. The full version, with commands, is
+      <code>docs/09-replication.md</code>.</p>
+    <h3>1. What you need</h3>
+    <ul>
+      <li>A Linux x86-64 machine (the prober host) with root, Python 3.10+, and optionally Go 1.22+ and Rust to build the other engines (<code>./build_workers.sh</code>).</li>
+      <li>A target on the same LAN segment that answers ping with 0 % loss. Nothing is installed or changed on it. Note its ordinary <code>ping</code> RTT.</li>
+    </ul>
+    <h3>2. Prepare the prober host</h3>
+    <ul>
+      <li>Close other applications; plug in the power (laptops throttle on battery).</li>
+      <li>For clean numbers: CPU governor <code>performance</code>, deep sleep states limited, the NIC's interrupts kept off the probe core (the last CPU). The dashboard records these <b>host conditions</b> with every run and warns about each one; report them with your results.</li>
+    </ul>
+    <h3>3. The protocol</h3>
+    <ol>
+      <li>Start the dashboard (<code>sudo .venv/bin/python -m server.app</code>) and press <b>Ephemres defaults</b>.</li>
+      <li>Enter the target. Leave <b>NIC hardware timestamps</b> off.</li>
+      <li>Choose the <b>CPU core mode</b> to test. Under <b>Batch engines</b>, tick Python, Go and Rust; set <b>Repeat</b> to 5; tick <b>Idle floor every round</b>.</li>
+      <li>Write the question in <b>What is this run checking?</b> (e.g. "Ephemres defaults, single core: which engine keeps intrusion lowest?") and press <b>Start batch</b>. Leave the machine alone until it finishes (the form shows how long).</li>
+      <li>Repeat the whole batch with the other <b>CPU core mode</b>. Multi-Core covers <b>Python multi-core</b> too (its ORM work goes to worker
+        processes), so the two batches together give all six engine × mode combinations. For a pure measurement of Python's hand-over cost, add a
+        Multi-Core variation with <code>db_write_semaphore</code> at or below the pool size (CPUs − 1).</li>
+      <li>Then each variation you study, changing ONE setting at a time from the Ephemres defaults.</li>
+      <li>Every finished run is saved to <code>test_results/</code> automatically (the header shows "auto-save on" and "0 unsaved"); saved runs reload after a restart.</li>
+    </ol>
+    <h3>4. Reading and reporting</h3>
+    <p>What each row and chart means is in <a href="#d-compare">Reading the comparison table</a> and <a href="#d-charts">Reading the charts</a>.</p>
+    <ul>
+      <li>Select the batch, keep <b>combine repeats</b> on. Compare medians and ranges; treat overlapping ranges as no difference shown (▼/▲ only appear when ranges are clear of each other; with fewer than 5 repeats treat them as hints).</li>
+      <li>Quote the primary error % (total lag ÷ total kernel RTT) and intrusion p95, with the number of repeats and packets (n).</li>
+      <li>For Python multi-core also quote the <b>ORM offload overhead</b>, and the semaphore and CPU count, since pool waiting is part of it.</li>
+      <li>Report the target RTT, the host conditions, the dashboard's settings (the Markdown export lists them), and whether the not-like-for-like banner was clear.</li>
+      <li>Share the result files: each run's <code>.csv</code>, <code>_cycles.csv</code>, <code>.meta.json</code> and its <code>INDEX.md</code> entry.</li>
+    </ul>
+  </section>
+
+  <section class="panel" id="d-refs">
+    <h2>Related work and references</h2>
+    <p>The literature divides into <b>core work</b> directly explaining host-side timestamp distortion, event-loop blocking, and garbage-collection
+      pauses, and <b>additional foundational work</b> across physics, general benchmark bias, and hardware packet generation.</p>
+    <h3>Core literature: the measuring host as a source of error</h3>
+    <table>
+      <thead><tr><th>Reference</th><th>Why it matters here</th></tr></thead>
+      <tbody>
+        <tr><td>W. de Bruijn, "SO_TIMESTAMPING: Powering Fleetwide RPC Monitoring", <i>Netdev 0x17</i> (2023)</td>
+          <td>Demonstrates in Google's RPC fleet that user-space timing falsely blames the physical network for delays in the host's own software stack; poses the open question: <i>"How much do measurements perturb the measured system?"</i></td></tr>
+        <tr><td>A. Pásztor and D. Veitch, "PC Based Precision Timing Without GPS", <i>ACM SIGMETRICS 2002</i>, 352-362 (and <i>PAM 2001</i>)</td>
+          <td>Demonstrates that standard Unix active probers suffer from OS interrupt and scheduling noise, distorting software timestamps and jitter; establishes software timestamp inaccuracy in user-space probing.</td></tr>
+        <tr><td>T. Holterbach, C. Pelsser, R. Bush and L. Vanbever, "Quantifying Interference between Measurements on the RIPE Atlas Platform", <i>IMC 2015</i>, ACM, 437-443</td>
+          <td>The closest published evidence of a monitor distorting its own readings: on RIPE Atlas, a probe's own measurement load inflates the RTTs it reports (less on faster CPUs).</td></tr>
+        <tr><td>W. Li, D. Wu, R. K. C. Chang and R. K. P. Mok, "Toward Accurate Network Delay Measurement on Android Phones", <i>IEEE Transactions on Mobile Computing</i> 17(3), 717-732 (2018)</td>
+          <td>Splits the RTT that measurement apps report into user-space and kernel-space inflation: the same split as Clock B − Clock A, applied to phones.</td></tr>
+        <tr><td>J. Sommers, P. Barford, N. Duffield and A. Ron, "Accurate and Efficient SLA Compliance Monitoring", <i>ACM SIGCOMM 2007</i>, 109-120 (and <i>SIGCOMM 2005</i>)</td>
+          <td>Shows how probe schedules (bursts vs. Poisson/staggered) perturb network queues and distort SLA metrics: the theoretical foundation for separating internal from external observer effects.</td></tr>
+      </tbody>
+    </table>
+    <h3>Core literature: asynchronous runtimes, event-loop blocking and garbage collection</h3>
+    <table>
+      <thead><tr><th>Reference</th><th>Why it matters here</th></tr></thead>
+      <tbody>
+        <tr><td>J. Dean and L. A. Barroso, "The Tail at Scale", <i>Communications of the ACM</i> 56(2), 74-80 (2013)</td>
+          <td>Foundational analysis of how background maintenance, garbage collection pauses, and shared-queue contention amplify p95/p99 tail latency in networked systems.</td></tr>
+        <tr><td>P. Galindo Salgado, "Time to take out the rubbish: garbage collector", <i>PyCon US 2019</i>, Python Software Foundation</td>
+          <td>CPython core developer breakdown of Python's generational cyclic garbage collector (<code>gc</code>), explaining how cyclic traversal halts the interpreter and pauses the <code>asyncio</code> event loop.</td></tr>
+        <tr><td>C. Wu and M. Ni (Instagram Engineering), "Dismissing Python Garbage Collection at Instagram", <i>Instagram Engineering Blog</i> (2017)</td>
+          <td>Production study showing how CPython cyclic GC pauses and copy-on-write page faults hurt tail latency and throughput in Python worker processes.</td></tr>
+        <tr><td>M. Nowack (Discord Engineering), "Why Discord is Switching from Go to Rust", <i>Discord Engineering Blog</i> (2020)</td>
+          <td>Production comparison showing how Go's concurrent GC (forcing periodic mark/sweep scans every 2 minutes) caused latency spikes that Rust's zero-GC ownership model eliminated.</td></tr>
+        <tr><td>A. Clements, "Proposal: Non-cooperative goroutine preemption", <i>Go Design Documents</i>, Issue #24543 (2019)</td>
+          <td>Explains Go's goroutine scheduler and preemption boundaries when tight CPU-bound loops compete with timer-woken goroutines.</td></tr>
+      </tbody>
+    </table>
+    <h3>Standards</h3>
+    <table>
+      <thead><tr><th>Reference</th><th>Why it matters here</th></tr></thead>
+      <tbody>
+        <tr><td>IETF RFC 2330, "Framework for IP Performance Metrics" (1998), §10.2, and RFC 7679, "A One-Way Delay Metric for IPPM" (2016), §3.7.2</td>
+          <td>The standards' distinction between <i>wire time</i> and <i>host time</i>, and the error between them: what Clock A and Clock B measure on every packet.</td></tr>
+        <tr><td>IETF RFC 3550 (RTP), section 6.4.1: smoothed inter-arrival jitter <code>J ← J + (|D| − J) / 16</code></td>
+          <td>The jitter formula used. Any observer delay on a receive timestamp inflates |D| and contaminates the smoothed jitter of the packets that follow; the lab reports jitter on both the kernel and the observer clock.</td></tr>
+      </tbody>
+    </table>
+    <h3>Additional relevant literature for extended studies</h3>
+    <table>
+      <thead><tr><th>Reference</th><th>Why it matters here</th></tr></thead>
+      <tbody>
+        <tr><td>W. Heisenberg, "Über den anschaulichen Inhalt der quantentheoretischen Kinematik und Mechanik", <i>Zeitschrift für Physik</i> 43, 172-198 (1927)</td>
+          <td>Conceptual analogy: observing more sharply disturbs more. In telemetry, frequent user-space observation injects interrupts and context switches into the packet pipeline.</td></tr>
+        <tr><td>B. Rossi and D. B. Hall, "Variation of the Rate of Decay of Mesotrons with Momentum", <i>Physical Review</i> 59(3), 223-228 (1941)</td>
+          <td>Conceptual analogy: elapsed time depends on the frame of reference (wire time vs. kernel time vs. observer time).</td></tr>
+        <tr><td>J. Gait, "A Probe Effect in Concurrent Programs", <i>Software: Practice and Experience</i> 16(3), 225-233 (1986)</td>
+          <td>Adding monitoring code to concurrent software changes its scheduling and event order: the original software "probe effect".</td></tr>
+        <tr><td>A. D. Malony, D. A. Reed and H. A. G. Wijshoff, "Performance Measurement Intrusion and Perturbation Analysis", <i>IEEE Transactions on Parallel and Distributed Systems</i> 3(4), 433-450 (1992)</td>
+          <td>Models how much a monitor's own instrumentation perturbs the timing it measures, and how to subtract it: the formal precursor to subtracting an idle floor.</td></tr>
+        <tr><td>T. Mytkowicz, A. Diwan, M. Hauswirth and P. F. Sweeney, "Producing Wrong Data Without Doing Anything Obviously Wrong!", <i>ASPLOS XIV</i>, ACM, 265-276 (2009)</td>
+          <td>Small differences in runtime and memory layout systematically bias benchmarks, which is why the lab runs identical packets, schedules and statistics in every engine.</td></tr>
+        <tr><td>T. Dreibholz, "High-Precision Round-Trip Time Measurements in the Internet with HiPerConTracer", <i>SoftCOM 2023</i>, IEEE, 1-7</td>
+          <td>A ping/traceroute tool that moved to kernel and hardware packet timestamps so that user-space scheduling no longer enters its RTTs; surveys the Linux timestamping options.</td></tr>
+        <tr><td>N. Zilberman, M. Grosvenor, D. A. Popescu, N. Manihatty-Bojan, G. Antichi, M. Wójcik and A. W. Moore, "Where Has My Time Gone?", <i>PAM 2017</i>, Springer LNCS, 201-214</td>
+          <td>Breaks host latency down from the application to the wire: host-side delay has many sources and must be measured.</td></tr>
+        <tr><td>A. Botta, A. Dainotti and A. Pescapé, "Do You Trust Your Software-Based Traffic Generator?", <i>IEEE Communications Magazine</i> 48(9), 158-165 (2010)</td>
+          <td>Software tools do not send or time packets exactly as configured: the send-side counterpart of observer lag (compare send lag).</td></tr>
+        <tr><td>P. Emmerich, S. Gallenmüller, D. Raumer, F. Wohlfart and G. Carle, "MoonGen: A Scriptable High-Speed Packet Generator", <i>IMC 2015</i>, ACM, 275-287</td>
+          <td>Uses NIC hardware timestamps for sub-microsecond latency measurement because software timestamps are not precise enough.</td></tr>
+        <tr><td>V. Paxson, "On Calibrating Measurements of Packet Transit Times", <i>ACM SIGMETRICS 1998</i>, 11-21</td>
+          <td>Clock adjustments and skew corrupt delay measurements even under NTP: the background to the clock-slew threat.</td></tr>
+      </tbody>
+    </table>
+    <p><b>What this lab adds.</b> The work above shows that measuring hosts add error and how to timestamp around it. As far as this project's
+      literature search went, none of it captures <i>SO_TIMESTAMPING and application time on every single packet simultaneously</i> to isolate user-space delay,
+      measures how much <i>the monitor's own post-probe database work</i> delays reading replies and contaminates in-flight measurements of other endpoints,
+      compares <i>concurrency runtimes</i> (asyncio, Go goroutines, tokio tasks; one core and all cores) under identical loads, quantifies Python's
+      <i>multi-core process-offload tax</i>, or separates <i>loss caused by the observer</i> from network loss.</p>
+    <div class="note">Full project documentation, including methodology details and the Linux timestamping interface, is in the <code>docs/</code> folder.</div>
+  </section>
+
+  <section class="panel" id="d-controls">
+    <h2>Controls reference: every option on the Lab tab</h2>
+    <p>Every control, what it does, its default and allowed range, Ephemres' own value, and what it means for a comparison:
+      <b>variable</b> = what you compare (may differ between compared runs); <b>must match</b> = keep identical across runs you compare;
+      <b>label</b> = bookkeeping, never changes the measurement; <b>view only</b> = changes what you see, not what was measured.
+      The same text appears as a tooltip when you hover a control.</p>
+    <details class="reftable"><summary>Show the controls reference (every option on the Lab tab, as a table)</summary>
+      <div id="gloss-controls"></div></details>
+  </section>
+
+  <section class="panel" id="d-metrics">
+    <h2>Glossary: every metric and chart</h2>
+    <details class="reftable"><summary>Show the glossary (every metric and chart)</summary>
+      <dl class="gloss" id="gloss-metrics"></dl></details>
+  </section>
+
+</main>
+
+<script src="/static/vendor/chart.umd.min.js"></script>
+<script>
+"use strict";
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const haveChart = typeof Chart !== "undefined";
+if (!haveChart) $("nochart").style.display = "block";
+
+// ---------------- formatting ----------------
+const fmtUs = v => v == null ? "n/a" : (Math.abs(v) >= 1000 ? (v / 1000).toFixed(2) + " ms" : v.toFixed(1) + " µs");
+const fmtPct = v => v == null ? "n/a" : v.toFixed(1) + " %";
+const fmtInt = v => v == null ? "n/a" : String(v);
+const store = {
+  get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
+};
+
+// ---------------- state ----------------
+// Run colours come from the theme tokens --run-1..8: a categorical palette checked for colour-blind
+// separation in both themes (slot ORDER is part of that check, so slots are filled in order). Each run
+// also gets its own marker shape, so overlapping runs never depend on colour alone.
+const css = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+const MAX_COLS = 8;                  // columns (runs, or groups of repeats) that get their own colour
+const MAX_SEL = 60;                  // runs that can be selected (repeats are combined into columns)
+const SHAPES = ["circle", "triangle", "rect", "rectRot", "crossRot", "star", "rectRounded", "cross"];
+const SHAPE_GLYPH = ["●", "▲", "■", "◆", "✕", "✶", "▢", "+"];
+let EPHEMRES = {virtual_endpoints: 100, pings_per_cycle: 5, interval_s: 8, timeout_s: 2, stagger_window_s: 60,
+                cycles: 3, cycle_length_s: 60, db_write_semaphore: 15, simulated_db_ms: 3};   // replaced by the server's copy
+let runs = [], current = null;
+const analyses = {};                 // run id -> {analysis, timeline, meta}
+let sel = store.get("sel", []);      // ordered selected run ids
+let base = store.get("base", null);  // baseline run id
+let focus = null;
+const colorOf = {};                  // colour key -> palette index (stable while selected)
+
+const ENG = {python: "py", go: "go", rust: "rs"};
+const engTag = cfg => `${ENG[(cfg || {}).engine || "python"]}·${((cfg || {}).cpu_mode || "single_core") === "multi_core" ? "multi" : "single"}`;
+const runById = id => runs.find(r => r.id === id);
+const isFloor = c => (c || {}).role === "floor" || ((c || {}).role == null && (c || {}).tag === "floor");
+function schedText(c) {
+  const st = c.stagger_window_s == null ? "?" : (c.stagger_window_s === 0 ? "burst" : `stagger ${c.stagger_window_s}s`);
+  return st + ((c.cycles || 1) > 1 ? ` · ${c.cycles}×${c.cycle_length_s}s` : "") + (c.interval_s != null && c.interval_s !== 1 ? ` · every ${c.interval_s}s` : "");
+}
+function hhmmss(t) { return t ? new Date(t * 1000).toLocaleTimeString([], {hour12: false}) : ""; }
+function runLabel(r, short) {
+  const c = r.cfg || {};
+  return short ? `${engTag(c)} · ${c.virtual_endpoints}ep ${schedText(c)} s${c.db_write_semaphore ?? "?"} d${c.simulated_db_ms ?? "?"}`
+               : `${engTag(c)} · ${hhmmss(r.started_at)} · ${c.virtual_endpoints}ep ${schedText(c)}`;
+}
+// Repeats of the same setup (one batch series, same engine, CPU mode and role) form a GROUP. With
+// "combine repeats" on, a group is one column and its runs share one colour and marker shape.
+const groupKeyOf = c => !(c || {}).series_id ? "" :
+  `${c.series_id}|${c.engine || "python"}|${c.cpu_mode || "single_core"}|${c.role || "test"}`;
+const combineOn = () => $("combine").checked;
+const ckey = id => { const r = runById(id); const g = r && combineOn() ? groupKeyOf(r.cfg) : ""; return g || id; };
+function slot(id) {
+  const k = ckey(id);
+  if (colorOf[k] == null) {
+    const used = new Set(sel.map(ckey).filter(x => x !== k).map(x => colorOf[x]));
+    let i = 0; while (used.has(i)) i++;
+    colorOf[k] = i % MAX_COLS;
+  }
+  return colorOf[k];
+}
+const color = id => css(`--run-${slot(id) + 1}`);
+const shape = id => SHAPES[slot(id)];
+const chip = id => `<span class="chip" style="background:${color(id)}"></span><span class="muted" aria-hidden="true">${SHAPE_GLYPH[slot(id)]}</span> `;
+const columnsFor = ids => new Set(ids.map(ckey)).size;
+
+// ---------------- theme ----------------
+function applyTheme(mode) {
+  if (mode === "light" || mode === "dark") document.documentElement.dataset.theme = mode;
+  else delete document.documentElement.dataset.theme;               // auto: follow the operating system
+  store.set("theme", mode);
+  if (haveChart) { Object.values(charts).forEach(c => c.destroy()); initCharts(); }   // charts read colours at creation
+  renderAll();
+}
+matchMedia("(prefers-color-scheme: light)").addEventListener("change", () => { if (store.get("theme", "auto") === "auto") applyTheme("auto"); });
+const selRuns = () => sel.map(id => analyses[id] && runById(id) ? {id, run: runById(id), a: analyses[id]} : null).filter(Boolean);
+
+// ---------------- data ----------------
+async function ensureAnalysis(id) {
+  const r = await fetch(`/api/runs/${encodeURIComponent(id)}/analysis`);
+  if (r.ok) { const j = await r.json(); analyses[id] = {analysis: j.analysis, timeline: j.timeline, meta: j.meta || {}}; }
+}
+async function setSelection(ids) {
+  sel = ids.slice(0, MAX_SEL);
+  const keep = new Set(sel.map(ckey));
+  for (const k of Object.keys(colorOf)) if (!keep.has(k)) delete colorOf[k];
+  // The browser only keeps analyses it shows; anything else is fetched again when selected.
+  for (const id of Object.keys(analyses)) if (!sel.includes(id) && !(current && current.id === id)) delete analyses[id];
+  // default baseline: the first selected TEST run (an idle-floor run is a reference, not a baseline)
+  if (!sel.includes(base)) base = sel.find(id => { const r = runById(id); return r && !isFloor(r.cfg); }) || sel[0] || null;
+  if (!focus || !sel.includes(focus)) focus = base;
+  store.set("sel", sel); store.set("base", base);
+  await Promise.all(sel.filter(id => !analyses[id] && runById(id)).map(ensureAnalysis));
+  renderAll();
+}
+
+// ---------------- runs table ----------------
+function renderRuns() {
+  const q = $("filter").value.trim().toLowerCase();
+  let list = runs.slice().sort((a, b) => (b.started_at || 0) - (a.started_at || 0));
+  if (q) list = list.filter(r => (r.name + " " + r.status + " " + JSON.stringify(r.cfg)).toLowerCase().includes(q));
+  const manage = $("managemode").checked;
+  const head = `<thead><tr>${manage ? '<th title="ticked for Save / Delete">manage</th>' : ""}<th></th><th>●</th><th>started</th><th>engine</th><th>cores</th><th>endpoints</th><th>schedule</th>
+    <th>semaphore</th><th>ORM ms</th><th>target</th><th>status</th><th>what it checks</th></tr></thead>`;
+  const row = r => {
+    const c = r.cfg || {}, on = sel.includes(r.id), live = r.status === "running" || r.status === "starting";
+    return `<tr class="${on ? "sel" : ""}">
+      ${manage ? `<td><input type="checkbox" data-manage="${esc(r.id)}" aria-label="tick for save or delete: ${esc(r.name)}" ${picked.has(r.id) ? "checked" : ""} ${live ? 'disabled title="still running"' : ""}></td>` : ""}
+      <td><input type="checkbox" data-pick="${esc(r.id)}" aria-label="compare ${esc(r.name)}" ${on ? "checked" : ""}></td>
+      <td>${on ? `<input type="radio" name="base" data-base="${esc(r.id)}" aria-label="use as baseline: ${esc(r.name)}" ${base === r.id ? "checked" : ""}>` : ""}</td>
+      <td>${on ? chip(r.id) : ""}${esc(hhmmss(r.started_at))} <span class="muted">${r.saved_as ? "saved" : "unsaved"}</span></td>
+      <td>${esc({python: "Python", go: "Go", rust: "Rust"}[c.engine || "python"])}</td>
+      <td>${(c.cpu_mode || "single_core") === "multi_core" ? "multi" : "single"}</td>
+      <td>${esc(c.virtual_endpoints)}</td><td>${esc(schedText(c))}</td><td>${esc(c.db_write_semaphore ?? "?")}</td>
+      <td>${esc(c.simulated_db_ms ?? "?")}</td><td>${esc(String(c.targets || "").split(",")[0])}</td>
+      <td>${live ? '<span class="pill running">' + esc(r.status) + "</span>" : esc(r.status)}</td>
+      <td class="purpose" title="${esc(c.note || "")}">${isFloor(c) ? '<span class="pill">idle floor</span> ' : ""}${c.series_id ? `<span class="pill" title="batch series ${esc(c.series_id)}">repeat ${esc(c.repeat)}/${esc(c.repeats)}</span> ` : ""}${c.note ? esc(c.note) : '<span class="muted">no note</span>'}</td></tr>`;
+  };
+  let body = "";
+  if ($("groupby").checked) {
+    const groups = new Map();
+    for (const r of list) { if (!groups.has(r.scenario)) groups.set(r.scenario, []); groups.get(r.scenario).push(r); }
+    for (const [sc, rs] of groups) {
+      // A group is open when you opened it, or (by default) when it holds a selected or running run, or is small.
+      const auto = groups.size === 1 || rs.length <= 3 || rs.some(r => sel.includes(r.id) || r.status === "running" || r.status === "starting");
+      const open = sc in groupOpen ? groupOpen[sc] : auto;
+      body += `<tr class="grp"><td colspan="${manage ? 13 : 12}"><button class="small fold" data-fold="${esc(sc)}" aria-expanded="${open}"
+        aria-label="${open ? "hide" : "show"} the ${rs.length} runs of scenario ${esc(sc)}">${open ? "▾" : "▸"}</button>scenario <b>${esc(sc)}</b> · ${rs.length} run${rs.length > 1 ? "s" : ""} ·
+        engines: ${esc([...new Set(rs.map(r => engTag(r.cfg)))].join(", "))}
+        <button class="small" data-grp="${esc(sc)}">select all ${rs.length}</button></td></tr>` + (open ? rs.map(row).join("") : "");
+    }
+  } else body = list.map(row).join("");
+  $("runs").innerHTML = head + `<tbody>${body || '<tr><td colspan="${manage ? 13 : 12}" class="muted">No runs yet. Start one above, or save a run to test_results/.</td></tr>'}</tbody>`;
+}
+$("runs").addEventListener("click", e => {
+  const t = e.target;
+  if (t.dataset.fold) {
+    const open = t.getAttribute("aria-expanded") !== "true";
+    groupOpen[t.dataset.fold] = open; store.set("groupOpen", groupOpen); renderRuns(); return;
+  }
+  if (t.dataset.manage) {
+    t.checked ? picked.add(t.dataset.manage) : picked.delete(t.dataset.manage);
+    renderManage(); return;
+  }
+  if (t.dataset.pick) {
+    const id = t.dataset.pick;
+    if (t.checked && (sel.length >= MAX_SEL || columnsFor([...sel, id]) > MAX_COLS)) {
+      t.checked = false; $("selnote").textContent = `At most ${MAX_COLS} columns: untick a run, or tick "combine repeats" so repeats share a column.`; return;
+    }
+    $("selnote").textContent = "";
+    setSelection(t.checked ? [...sel, id] : sel.filter(x => x !== id));
+  } else if (t.dataset.base) { base = t.dataset.base; store.set("base", base); renderAll(); }
+  else if (t.dataset.grp) {
+    const ids = [...new Set([...sel, ...runs.filter(r => r.scenario === t.dataset.grp).map(r => r.id)])];
+    if (columnsFor(ids) > MAX_COLS) { $("selnote").textContent = `That would make more than ${MAX_COLS} columns; tick "combine repeats" or select fewer runs.`; return; }
+    setSelection(ids);
+  }
+});
+$("filter").oninput = renderRuns; $("groupby").onchange = renderRuns;
+$("clearsel").onclick = () => setSelection([]);
+
+// ---------------- managing results: save / delete (separate from the comparison ticks) ----------------
+const picked = new Set();                  // run ids ticked in "Manage results" mode
+const groupOpen = store.get("groupOpen", {}); // scenario -> open/closed as YOU set it (otherwise the default rule)
+function shownRuns() {                     // the runs the table shows right now (the text filter applies)
+  const q = $("filter").value.trim().toLowerCase();
+  return runs.filter(r => !q || (r.name + " " + r.status + " " + JSON.stringify(r.cfg)).toLowerCase().includes(q));
+}
+function renderManage() {
+  for (const id of [...picked]) if (!runById(id)) picked.delete(id);
+  const on = $("managemode").checked, rs = [...picked].map(runById).filter(Boolean);
+  $("managebar").style.display = on ? "flex" : "none";
+  const unsaved = rs.filter(r => !r.saved_as).length;
+  $("mg_info").textContent = rs.length ? `${rs.length} ticked: ${rs.length - unsaved} saved, ${unsaved} unsaved` : "nothing ticked";
+  $("mg_save").disabled = !unsaved; $("mg_delete").disabled = !rs.length;
+}
+$("managemode").onchange = () => { if (!$("managemode").checked) picked.clear(); renderRuns(); renderManage(); };
+$("mg_all").onclick = () => { for (const r of shownRuns()) if (r.status !== "running" && r.status !== "starting") picked.add(r.id); renderRuns(); renderManage(); };
+$("mg_none").onclick = () => { picked.clear(); renderRuns(); renderManage(); };
+$("mg_save").onclick = async () => {
+  const r = await fetch("/api/runs/save-selected", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({ids: [...picked]})});
+  const j = await r.json().catch(() => ({}));
+  $("selnote").textContent = r.ok ? `Saved ${j.saved.length} run(s) to ${j.folder}/` + (j.already_saved.length ? `; ${j.already_saved.length} were already saved` : "") +
+                                    (j.failed.length ? `; failed: ${j.failed.join("; ")}` : "") : "Save failed: " + JSON.stringify(j.detail || r.status);
+};
+$("mg_delete").onclick = async () => {
+  const rs = [...picked].map(runById).filter(Boolean), saved = rs.filter(r => r.saved_as), unsaved = rs.filter(r => !r.saved_as);
+  const list = rs.slice(0, 12).map(r => "  • " + r.name).join("\n") + (rs.length > 12 ? `\n  … and ${rs.length - 12} more` : "");
+  const msg = `Delete ${rs.length} run(s)?\n\n${list}\n\n` +
+    (saved.length ? `${saved.length} saved run(s): their files and INDEX.md entries are MOVED to .deleted/<date-time>/ inside the results folder (normally test_results/), so they can be restored by moving them back.\n` : "") +
+    (unsaved.length ? `${unsaved.length} unsaved run(s) are discarded from memory for good.\n` : "");
+  if (!confirm(msg)) return;
+  const r = await fetch("/api/runs/delete", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({ids: rs.map(x => x.id)})});
+  const j = await r.json().catch(() => ({}));
+  if (r.ok) {
+    picked.clear();
+    await setSelection(sel.filter(id => !rs.some(x => x.id === id)));
+    $("selnote").textContent = `Deleted ${j.moved_to_trash.length + j.discarded_unsaved.length} run(s)` +
+      (j.trash ? `; files moved to ${j.trash}/` : "") + (j.failed.length ? `; failed: ${j.failed.join("; ")}` : "");
+  } else $("selnote").textContent = "Delete failed: " + JSON.stringify(j.detail || r.status);
+};
+$("saveall").onclick = async () => {
+  const r = await fetch("/api/save-all", {method: "POST"}), j = await r.json().catch(() => ({}));
+  $("selnote").textContent = r.ok ? `Saved ${(j.saved || []).length} run(s) to ${j.folder}/` + ((j.failed || []).length ? `; failed: ${j.failed.join("; ")}` : "")
+                                  : "Save all failed: " + JSON.stringify(j.detail || r.status);
+};
+
+// ---------------- comparison matrix ----------------
+// lower: lower is better (turns on best/worst highlighting for that row).
+// This run's statistic minus its idle floor's (null without a floor run). Percentile minus percentile,
+// so small negative values are noise.
+const above = (s, key) => s.floor && s[key] != null && s.floor[key] != null ? s[key] - s.floor[key] : null;
+// Below the floor means the difference is smaller than the noise between two single runs, not a real gain.
+const fmtAbove = v => v == null ? "n/a" : v < 0 ? `${fmtUs(v)} (below floor: noise)` : fmtUs(v);
+// lower: lower is better (turns on best/worst marking for that row). q: the quantile, so a row can be
+// flagged when the run has too few packets to support it (rule of thumb: n >= 10 / (1 - q)).
+const SUMMARY_ROWS = [
+  {g: "Volume"},
+  {l: "Packets sent", get: s => s.sent, fmt: fmtInt},
+  {l: "Packets measured (n)", get: s => s.n_lag, fmt: fmtInt},
+  {l: "Packets lost", get: s => s.lost, fmt: fmtInt, lower: true},
+  {l: "  lost: no reply at all", get: s => s.lost_no_reply, fmt: fmtInt, lower: true},
+  {l: "  lost: reply after the timeout", get: s => s.lost_after_timeout, fmt: fmtInt, lower: true},
+  {l: "  lost: reply in time, read too late", get: s => s.lost_read_late, fmt: fmtInt, lower: true},
+  {g: "Wire (kernel arrival clock)"},
+  {l: "Kernel RTT, mean", get: s => s.kernel_rtt_mean_us, fmt: fmtUs},
+  {l: "Cycle jitter, RFC 3550", get: s => s.jitter_kernel_us, fmt: fmtUs},
+  {g: "Observer (the runtime's own clock)"},
+  {l: "Observer RTT, mean", get: s => s.python_rtt_mean_us, fmt: fmtUs, lower: true},
+  {l: "Cycle jitter, RFC 3550 ", get: s => s.jitter_python_us, fmt: fmtUs, lower: true},
+  {g: "Observer intrusion (observer − kernel)"},
+  {l: "mean", get: s => s.lag_mean_us, fmt: fmtUs, lower: true},
+  {l: "p50", get: s => s.lag_p50_us, fmt: fmtUs, lower: true, q: 0.5},
+  {l: "p95", get: s => s.lag_p95_us, fmt: fmtUs, lower: true, q: 0.95},
+  {l: "p99", get: s => s.lag_p99_us, fmt: fmtUs, lower: true, q: 0.99},
+  {l: "max", get: s => s.lag_max_us, fmt: fmtUs, lower: true},
+  {l: "error %: total lag ÷ total kernel RTT", get: s => s.pct_total, fmt: fmtPct, lower: true},
+  {l: "error %, per packet: median", get: s => s.pct_median, fmt: fmtPct, lower: true},
+  {l: "error %, per packet: mean", get: s => s.pct_mean, fmt: fmtPct, lower: true},
+  {l: "error %, per packet: max", get: s => s.pct_max, fmt: fmtPct, lower: true},
+  // Shown only with "subtract idle floor": this run minus the same setup measured with no ORM work.
+  {g: "Intrusion above the idle floor (minus the same setup with no ORM work)", floor: true},
+  {l: "idle floor run", floor: true, info: true, get: s => s.is_floor ? -1 : s.floor ? s.floor.started_at : null,
+   fmt: v => v === -1 ? "this IS a floor run" : v == null ? "none measured yet" : "measured at " + hhmmss(v)},
+  {l: "above floor: mean", floor: true, get: s => above(s, "lag_mean_us"), fmt: fmtAbove, lower: true},
+  {l: "above floor: p50", floor: true, get: s => above(s, "lag_p50_us"), fmt: fmtAbove, lower: true, q: 0.5},
+  {l: "above floor: p95", floor: true, get: s => above(s, "lag_p95_us"), fmt: fmtAbove, lower: true, q: 0.95},
+  {l: "above floor: p99", floor: true, get: s => above(s, "lag_p99_us"), fmt: fmtAbove, lower: true, q: 0.99},
+  {l: "above floor: max", floor: true, get: s => above(s, "lag_max_us"), fmt: fmtAbove, lower: true},
+  {g: "Send side (ping sent late vs its schedule)"},
+  {l: "send lag, mean", get: s => s.send_lag_mean_us, fmt: fmtUs, lower: true},
+  {l: "send lag, p95", get: s => s.send_lag_p95_us, fmt: fmtUs, lower: true},
+  {l: "send lag, max", get: s => s.send_lag_max_us, fmt: fmtUs, lower: true},
+  {g: "Socket queue"},
+  {l: "Reader wakeups", get: s => s.reader_calls, fmt: fmtInt},
+  {l: "Packets per wakeup", get: s => s.packets_per_wakeup, fmt: v => v == null ? "n/a" : v.toFixed(2)},
+  {l: "Max queue depth", get: s => s.max_batch, fmt: fmtInt, lower: true},
+  {g: "Runtime"},
+  {l: "Canary max lag", get: s => s.canary ? s.canary.max_lag_us : null, fmt: fmtUs, lower: true},
+  {l: "Canary p95 lag", get: s => s.canary ? s.canary.p95_lag_us : null, fmt: fmtUs, lower: true},
+  {l: "Canary avg lag", get: s => s.canary ? s.canary.avg_lag_us : null, fmt: fmtUs},
+  {l: "ORM offload overhead (IPC + pool wait), mean", get: s => s.ipc_ms_mean == null ? null : s.ipc_ms_mean * 1000, fmt: fmtUs},
+  {l: "Dashboard stream cost per event", get: s => s.emit_us_per_event, fmt: fmtUs},
+];
+const enoughFor = (q, n) => q == null || q >= 1 || (n != null && n >= 10 / (1 - q));
+
+// Columns of the comparison: one per run, or with "combine repeats" one per group of repeats.
+function columns() {
+  const items = selRuns(), cols = new Map();
+  for (const x of items) {
+    const k = ckey(x.id);
+    if (!cols.has(k)) cols.set(k, {key: k, id: x.id, run: x.run, members: []});
+    cols.get(k).members.push(x);
+  }
+  return [...cols.values()];
+}
+const median = xs => { const v = xs.slice().sort((a, b) => a - b), n = v.length; return n ? (n % 2 ? v[(n - 1) / 2] : (v[n / 2 - 1] + v[n / 2]) / 2) : null; };
+const ERROR_ROWS = new Set(["error %: total lag ÷ total kernel RTT", "error %, per packet: median", "error %, per packet: mean", "error %, per packet: max"]);
+
+// Best/worst are marked only when the medians differ by at least the chosen threshold AND, when a column holds
+// repeats, the best column's highest run is still below the worst column's lowest run (ranges do not overlap).
+// Otherwise the difference is within what repeating the same run already produces.
+function renderMatrix() {
+  const cols = columns();
+  const tbl = $("matrix");
+  if (!cols.length) { tbl.innerHTML = '<tbody><tr><td class="muted">Select one or more runs above.</td></tr></tbody>'; return; }
+  const bi = Math.max(0, cols.findIndex(c => c.members.some(m => m.id === base)));
+  const showRatio = $("showratio").checked && cols.length > 1;
+  const thr = +$("hlthr").value;                       // percent; 0 = off
+  // What every column shares (setup, note) is said ONCE in the caption; each header keeps only what differs.
+  const setupOf = c => `${c.virtual_endpoints}ep ${schedText(c)} · s${c.db_write_semaphore ?? "?"} d${c.simulated_db_ms ?? "?"}`;
+  const sameSetup = cols.length > 1 && cols.every(col => setupOf(col.run.cfg) === setupOf(cols[0].run.cfg));
+  const sameNote = cols.length > 1 && cols.every(col => (col.run.cfg.note || "") === (cols[0].run.cfg.note || ""));
+  const caption = [sameSetup ? `<b>Setup in every column:</b> ${esc(setupOf(cols[0].run.cfg))}` : "",
+                   sameNote && cols[0].run.cfg.note ? `<b>What these runs check:</b> ${esc(cols[0].run.cfg.note)}` : ""].filter(Boolean).join(" · ");
+  const head = (caption ? `<caption class="sharedcap">${caption}</caption>` : "") + "<thead><tr><th>metric</th>" + cols.map((col, i) => {
+    const c = col.run.cfg, n = col.members.length;
+    return `<th class="run ${i === bi ? "basecol" : ""}">
+    ${chip(col.id)}<span class="nm">${esc(engTag(c))}${isFloor(c) ? " · floor" : ""}</span>${i === bi ? " (baseline)" : ""}${n > 1 ? ` <span class="pill">${n} repeats</span>` : ""}<br>
+    <span class="muted">${sameSetup ? "" : esc(setupOf(c)) + " · "}${esc(hhmmss(col.run.started_at))}</span>
+    ${c.note && !sameNote ? `<span class="purpose">${esc(c.note)}</span>` : ""}</th>`;
+  }).join("") + "</tr></thead>";
+  const zeroRows = [];                                 // rows that are 0 in every column: listed once, not drawn
+  const withFloor = $("abovefloor").checked;
+  let body = "";
+  for (const row of SUMMARY_ROWS) {
+    if (row.floor && !withFloor) continue;
+    if (row.g) { body += `<tr class="grp"><td colspan="${cols.length + 1}">${esc(row.g)}</td></tr>`; continue; }
+    // per column: the values of its runs (error % of a run whose RTT is too small to judge is left out)
+    const stats = cols.map(col => {
+      const vals = [], tooSmall = [];
+      for (const m of col.members) {
+        const s = m.a.analysis.summary, v = row.get(s);
+        if (ERROR_ROWS.has(row.l) && s.rtt_too_small) { tooSmall.push(m); continue; }
+        if (v != null && isFinite(v)) vals.push(v);
+      }
+      return vals.length ? {med: median(vals), lo: Math.min(...vals), hi: Math.max(...vals), n: vals.length,
+                            nlag: Math.min(...col.members.map(m => m.a.analysis.summary.n_lag ?? 0))}
+                         : {med: null, nm: tooSmall.length > 0};
+    });
+    if (!stats.some(t => t.med != null) && !row.floor && !stats.some(t => t.nm)) continue;
+    if (!row.floor && stats.every(t => t.med === 0 && t.lo === 0 && t.hi === 0)) { zeroRows.push(row.l.trim()); continue; }
+    // Idle-floor columns are reference measurements, not contenders: they never get ▼/▲ while test columns exist.
+    const contender = cols.map(col => !isFloor(col.run.cfg) || cols.every(c => isFloor(c.run.cfg)));
+    const meds = stats.filter((t, i) => contender[i] && t.med != null).map(t => t.med);
+    const mx = Math.max(...meds), mn = Math.min(...meds);
+    const best = stats.find((t, i) => contender[i] && t.med === mn), worst = stats.find((t, i) => contender[i] && t.med === mx);
+    const gap = mx === mn ? 0 : 100 * (mx - mn) / Math.max(Math.abs(mn), Math.abs(mx) * 1e-9, 1e-9);
+    const separated = !best || !worst || best.n === 1 && worst.n === 1 || best.hi < worst.lo;
+    // No marks on the above-floor rows: a negative value there is noise or a sleep-state artefact, not a winner.
+    const hl = row.lower && !row.floor && meds.length > 1 && thr > 0 && gap >= thr && separated;
+    const b = stats[bi].med;
+    body += `<tr><td title="${esc(ROW_HELP[row.l.trim()] || "")}">${esc(row.l)}</td>` + stats.map((t, i) => {
+      const cls = [i === bi ? "basecol" : ""];
+      if (t.med == null) {
+        const txt = t.nm ? '<span class="muted" title="median kernel RTT under 100 µs: an ordinary wake-up is already a large percentage, so judge the lag in µs">n/m (RTT too small)</span>'
+                         : esc(row.fmt(null));
+        return `<td class="cell ${cls.join(" ")}">${txt}</td>`;
+      }
+      const v = t.med;
+      let mark = "";
+      if (hl && contender[i] && v === mn) { cls.push("best"); mark = '<span class="mark" title="best of the selected columns">▼</span>'; }
+      if (hl && contender[i] && v === mx) { cls.push("worst"); mark = '<span class="mark" title="worst of the selected columns">▲</span>'; }
+      const magnitude = !row.info;
+      const w = magnitude && mx > 0 ? Math.max(0, 100 * v / mx) : 0;
+      const ratio = magnitude && showRatio && i !== bi && b && v > 0 && b > 0 ? `<span class="r">${(v / b).toFixed(2)}×</span>` : "";
+      const rf = row.fmt === fmtAbove ? fmtUs : row.fmt;
+      const range = magnitude && t.n > 1 ? `<span class="rng" title="lowest to highest of ${t.n} repeats">${esc(rf(t.lo))} – ${esc(rf(t.hi))}</span>` : "";
+      const lown = !enoughFor(row.q, t.nlag)
+        ? `<span class="lown" title="fewer than ${Math.ceil(10 / (1 - row.q))} packets: this percentile is close to the maximum and not reliable">few samples</span>` : "";
+      return `<td class="cell ${cls.join(" ")}"><span class="bar" style="width:${w}%;background:${color(cols[i].id)}"></span>${mark}<span class="v">${esc(row.fmt(v))}</span>${ratio}${lown}${range}</td>`;
+    }).join("") + "</tr>";
+  }
+  if (zeroRows.length) body += `<tr class="zerorow"><td colspan="${cols.length + 1}"><b>Zero in every column</b> (not drawn): ${esc(zeroRows.join(", "))}</td></tr>`;
+  tbl.innerHTML = head + `<tbody>${body}</tbody>`;
+  const ids = encodeURIComponent(sel.join(","));
+  $("exp_cmp_md").href = `/api/compare.md?ids=${ids}${combineOn() ? "&combine=true" : ""}`; $("exp_cmp_csv").href = `/api/compare.csv?ids=${ids}`;
+}
+
+// Warn when the selected runs asked different questions of the engines.
+const CHECK = [["virtual_endpoints", "endpoints"], ["stagger_window_s", "stagger window"], ["db_write_semaphore", "semaphore"],
+               ["simulated_db_ms", "ORM ms"], ["pings_per_cycle", "pings"], ["interval_s", "interval"], ["cycles", "cycles"],
+               ["cycle_length_s", "cycle length"], ["timeout_s", "timeout"], ["hw_timestamps", "NIC hardware stamps"], ["targets", "target"]];
+// Settings older runs did not record get the value they implicitly had; cycle length only matters with several cycles.
+function settingOf(c, k) {
+  if (k === "cycle_length_s" && (c.cycles || 1) <= 1) return "n/a";
+  const v = c[k] ?? {cycles: 1, timeout_s: 2, hw_timestamps: false}[k];
+  return typeof v === "number" ? String(+v) : String(v);
+}
+function renderWarn() {
+  const items = selRuns(), w = $("warn");
+  w.className = "banner warn";
+  if (items.length < 2) return;
+  // Idle-floor runs differ ON PURPOSE (0 ms ORM): leave them out, as long as some test runs are selected.
+  const tests = items.filter(x => !isFloor(x.run.cfg));
+  const pool = tests.length ? tests : items;
+  const diffs = CHECK.map(([k, l]) => [l, [...new Set(pool.map(x => settingOf(x.run.cfg, k)))]]).filter(([, v]) => v.length > 1);
+  if (!diffs.length) return;
+  w.className = "banner warn show";
+  w.innerHTML = "<b>Not like for like.</b> These settings differ between the selected runs: " +
+    diffs.map(([l, v]) => `${esc(l)} (${esc(v.join(" / "))})`).join("; ") + ". Differences in the results may come from the settings, not the engine.";
+}
+
+// ---------------- charts ----------------
+const charts = {};
+// Log axes fit the data (no fixed floor that leaves decades empty) and label only 1, 2 and 5 of each decade, with units.
+const fmtAxisUs = v => v >= 1000 ? +(v / 1000).toPrecision(3) + " ms" : +v.toPrecision(3) + " µs";
+const logTick = v => { const e = Math.floor(Math.log10(v) + 1e-9), m = v / 10 ** e;
+  return [1, 2, 5].some(k => Math.abs(m - k) < 1e-6) ? fmtAxisUs(v) : ""; };
+const LOGY = () => ({type: "logarithmic", grid: {color: css("--grid")}, ticks: {callback: logTick}});
+function mk(id, cfg) { if (haveChart) charts[id] = new Chart($(id), cfg); }
+const baseOpts = (extra = {}) => Object.assign({animation: false, maintainAspectRatio: false, interaction: {mode: "nearest", intersect: false},
+  plugins: {legend: {display: false}}}, extra);
+
+// Rows are [label, getter, quantile]; a percentile the run has too few samples for is left out, as in the table.
+// n: the sample count behind the set's percentiles.
+const METRIC_SETS = {
+  intrusion: {label: "Intrusion: mean / p95 / p99 / max", rows: [["mean", s => s.lag_mean_us], ["p95", s => s.lag_p95_us, 0.95], ["p99", s => s.lag_p99_us, 0.99], ["max", s => s.lag_max_us]]},
+  rtt: {label: "RTT: kernel vs observer", rows: [["kernel RTT", s => s.kernel_rtt_mean_us], ["observer RTT", s => s.python_rtt_mean_us]]},
+  jitter: {label: "Cycle jitter: kernel vs observer", rows: [["kernel", s => s.jitter_kernel_us], ["observer", s => s.jitter_python_us]]},
+  send: {label: "Send lag: mean / p95 / max", n: s => s.sent, rows: [["mean", s => s.send_lag_mean_us], ["p95", s => s.send_lag_p95_us, 0.95], ["max", s => s.send_lag_max_us]]},
+  canary: {label: "Scheduler canary: avg / p95 / max", rows: [["avg", s => s.canary && s.canary.avg_lag_us], ["p95", s => s.canary && s.canary.p95_lag_us], ["max", s => s.canary && s.canary.max_lag_us]]},
+};
+
+// Shades the ORM-work windows of one run behind the intrusion-over-time dots (chart.$shade = {windows, color}).
+const burstShade = {id: "burstShade", beforeDatasetsDraw(chart) {
+  const sh = chart.$shade; if (!sh || !sh.windows.length) return;
+  const {ctx, chartArea: {top, bottom, left, right}, scales: {x}} = chart;
+  ctx.save(); ctx.fillStyle = sh.color;
+  for (const [a, b] of sh.windows) {
+    let x0 = x.getPixelForValue(a), x1 = x.getPixelForValue(b);
+    if (x1 < left || x0 > right) continue;
+    x0 = Math.max(x0, left); x1 = Math.min(x1, right);
+    ctx.fillRect(x0, top, Math.max(1, x1 - x0), bottom - top);   // at least 1 px, so a 3 ms burst stays visible
+  }
+  ctx.restore();
+}};
+// [label, getter, unit]; percentile getters return null when the run has too few samples for them.
+const SPREAD_METRICS = {
+  p95: ["Intrusion p95", s => qOk(0.95, s.n_lag) ? s.lag_p95_us : null, "µs"], mean: ["Intrusion mean", s => s.lag_mean_us, "µs"],
+  p99: ["Intrusion p99", s => qOk(0.99, s.n_lag) ? s.lag_p99_us : null, "µs"], max: ["Intrusion max", s => s.lag_max_us, "µs"],
+  err: ["Error % (total lag ÷ total RTT)", s => s.rtt_too_small ? null : s.pct_total, "%"],
+  floor95: ["Intrusion above idle floor, p95", s => qOk(0.95, s.n_lag) ? above(s, "lag_p95_us") : null, "µs"],
+  send95: ["Send lag p95", s => qOk(0.95, s.sent) ? s.send_lag_p95_us : null, "µs"], canary: ["Canary max lag", s => s.canary && s.canary.max_lag_us, "µs"],
+};
+const qOk = (q, n) => enoughFor(q, n);
+// Settings a sweep can be plotted against: [config key, axis title].
+const SWEEP_X = [["virtual_endpoints", "virtual endpoints"], ["stagger_window_s", "stagger window (s)"], ["db_write_semaphore", "db_write_semaphore"],
+                 ["simulated_db_ms", "simulated DB work (ms)"], ["pings_per_cycle", "pings per cycle"], ["interval_s", "ping interval (s)"],
+                 ["cycle_length_s", "cycle length (s)"]];
+const ENGINE_DASH = {python: [], go: [8, 5], rust: [2, 4]};
+
+// Charts read the theme's colours when they are created; applyTheme() rebuilds them.
+function initCharts() {
+  const keep = $("metricset").value;
+  $("metricset").innerHTML = Object.entries(METRIC_SETS).map(([k, v]) => `<option value="${k}">${esc(v.label)}</option>`).join("");
+  if (keep) $("metricset").value = keep;
+  const keepSpread = $("spreadmetric").value;
+  $("spreadmetric").innerHTML = Object.entries(SPREAD_METRICS).map(([k, v]) => `<option value="${k}">${esc(v[0])}</option>`).join("");
+  if (keepSpread) $("spreadmetric").value = keepSpread;
+  const keepX = $("sweepx").value, keepY = $("sweepy").value;
+  $("sweepx").innerHTML = `<option value="auto">x: the setting that differs</option>` + SWEEP_X.map(([k, l]) => `<option value="${k}">x: ${esc(l)}</option>`).join("");
+  $("sweepy").innerHTML = Object.entries(SPREAD_METRICS).map(([k, v]) => `<option value="${k}">y: ${esc(v[0])}</option>`).join("");
+  if (keepX) $("sweepx").value = keepX;
+  if (keepY) $("sweepy").value = keepY;
+  if (!haveChart) return;
+  Chart.defaults.color = css("--muted"); Chart.defaults.borderColor = css("--line");
+  Chart.defaults.plugins.tooltip.filter = item => !item.dataset.$band;     // the band edges are shading, not data
+  const grid = {grid: {color: css("--grid")}};
+  mk("ch_bars", {type: "bar", data: {labels: [], datasets: []}, options: baseOpts({scales: {y: {...LOGY()}, x: grid}})});
+  // Tail-log x axis: a percentile q sits at -log10(1 - q), so p90 -> p99 -> p99.9 are equally spaced and the tail
+  // (where the observer effect lives) is not squeezed into the last few categories.
+  const pctChart = yTitle => ({type: "line", data: {datasets: []}, options: baseOpts({spanGaps: false, interaction: {mode: "nearest", intersect: true},
+    plugins: {legend: {display: false}, tooltip: {callbacks: {title: items => items.length ? items[0].raw.label : "",
+      label: c => `${c.dataset.label}: ${fmtUs(c.raw.y)}`}}},
+    scales: {y: {...LOGY(), title: {display: true, text: yTitle}},
+             x: {type: "linear", min: 0, ...grid, title: {display: true, text: "percentile (tail-log scale; max sits at log₁₀ n)"},
+                 afterBuildTicks: axis => { axis.ticks = TAIL_TICKS.filter(t => t.v <= axis.max + 1e-9).map(t => ({value: t.v})); },
+                 ticks: {callback: v => (TAIL_TICKS.find(t => Math.abs(t.v - v) < 1e-6) || {}).l || ""}}}})});
+  mk("ch_pct", pctChart("intrusion"));
+  mk("ch_kpct", pctChart("kernel RTT"));
+  mk("ch_hist", {type: "bar", data: {labels: [], datasets: []}, options: baseOpts({scales: {y: {beginAtZero: true, ...grid, title: {display: true, text: "% of replied packets"}}, x: {ticks: {maxRotation: 60}, ...grid}}})});
+  mk("ch_spread", {type: "scatter", data: {datasets: []}, options: baseOpts({
+    plugins: {legend: {display: false}, tooltip: {callbacks: {label: c => `${c.dataset.label}: ${c.raw.text}`}}},
+    scales: {x: {type: "linear", min: -0.5, ...grid, afterBuildTicks: axis => { axis.ticks = (axis.chart.$cols || []).map((_, i) => ({value: i})); },
+                 // one tick per column, on several lines: marker, engine, then the setup, so columns can be told apart
+                 ticks: {callback: v => ((charts.ch_spread && charts.ch_spread.$cols) || [])[v] || ""}},
+             y: {beginAtZero: true, ...grid, title: {display: true, text: "µs"}}}})});
+  mk("ch_time", {type: "scatter", plugins: [burstShade], data: {datasets: []}, options: baseOpts({scales: {y: {...LOGY(), title: {display: true, text: "intrusion"}}, x: {...grid, title: {display: true, text: "ms since first ping"}}}})});
+  // x is the rank as a share of the run's endpoints, so runs with different endpoint counts line up.
+  mk("ch_rank", {type: "line", data: {datasets: []}, options: baseOpts({parsing: false,
+    plugins: {legend: {display: false}, tooltip: {callbacks: {title: items => items.length ? `worst ${items[0].raw.x.toFixed(0)} % of endpoints` : "",
+      label: c => `${c.dataset.label}: EP ${c.raw.ep} · ${fmtUs(c.raw.y)}`}}},
+    scales: {y: {...LOGY(), title: {display: true, text: "mean intrusion"}},
+             x: {type: "linear", min: 0, max: 100, ...grid, title: {display: true, text: "endpoint rank, % of the run's endpoints (worst → best)"}, ticks: {callback: v => v + " %"}}}})});
+  mk("ch_sweep", {type: "scatter", data: {datasets: []}, options: baseOpts({
+    plugins: {legend: {display: false}, tooltip: {callbacks: {label: c => `${c.dataset.label}: ${c.raw.text}`}}},
+    scales: {x: {type: "linear", ...grid, title: {display: true, text: ""}, ticks: {includeBounds: false}},
+             y: {...LOGY(), title: {display: true, text: ""}, ticks: {callback: logTick, includeBounds: false}}}})});
+  mk("ch_canary", {type: "line", data: {datasets: []}, options: baseOpts({parsing: false, scales: {x: {type: "linear", ...grid, title: {display: true, text: "seconds into probing"}}, y: {beginAtZero: true, ...grid, title: {display: true, text: "ms"}}}})});
+  mk("ch_ep", {type: "bar", data: {labels: [], datasets: [
+    {label: "Kernel RTT (ms)", data: [], backgroundColor: css("--clock-a"), stack: "s"},
+    {label: "Observer intrusion (ms)", data: [], backgroundColor: css("--clock-b"), stack: "s"}]},
+    options: baseOpts({interaction: {mode: "index", intersect: false}, plugins: {legend: {display: true}, tooltip: {callbacks: {footer: items => {
+        const d = charts.ch_ep && charts.ch_ep._eps && charts.ch_ep._eps[items[0].dataIndex]; if (!d) return "";
+        return `observer RTT ${fmtUs(d.python_us)} · error ${fmtPct(d.pct_total)} · wakeups ${d.wakeups ?? "n/a"} · max queue ${d.max_batch ?? "n/a"}`; }}}},
+      scales: {x: {stacked: true, ...grid, ticks: {autoSkip: true, maxTicksLimit: 30, maxRotation: 60}}, y: {stacked: true, ...grid, title: {display: true, text: "ms"}}}})});
+}
+
+const pos = v => (v == null || !(v > 0)) ? null : v;     // a log axis cannot show 0 or negatives
+const tailX = q => -Math.log10(1 - q);                    // percentile -> position on the tail-log axis
+const TAIL_TICKS = [{v: 0, l: "min"}, {v: tailX(0.5), l: "p50"}, {v: tailX(0.9), l: "p90"}, {v: tailX(0.99), l: "p99"},
+                    {v: tailX(0.999), l: "p99.9"}, {v: tailX(0.9999), l: "p99.99"}];
+const qLabel = q => q === 0 ? "min" : q === 1 ? "max" : "p" + +(q * 100).toFixed(1);
+
+// Charts are drawn per comparison COLUMN. Without "combine repeats" every run is a column, so every run is drawn.
+// With it, a column of repeats becomes one line (the median of its runs) with a shaded band from the lowest to the
+// highest repeat, instead of one line per run: 15 runs of 3 engines read as 3 lines with their spread.
+function stat3(vals) {
+  const v = vals.filter(x => x != null && isFinite(x));
+  return v.length ? {med: median(v), lo: Math.min(...v), hi: Math.max(...v), n: v.length} : null;
+}
+function bandDatasets(col, pts, label, extra = {}) {          // pts: [{x, med, lo, hi, text?}]
+  const c = color(col.id);
+  const line = {label, borderColor: c, backgroundColor: c, pointStyle: shape(col.id), pointRadius: 4, borderWidth: 2, tension: 0,
+    parsing: false, data: pts.map(p => ({x: p.x, y: p.med, label: p.text})), ...extra};
+  if (col.members.length < 2) return [line];
+  const band = (k, fill) => ({label: `${label} (${k === "lo" ? "lowest" : "highest"} repeat)`, $band: true, parsing: false, fill,
+    data: pts.map(p => ({x: p.x, y: p[k]})), borderWidth: 0, pointRadius: 0, pointHitRadius: 0, backgroundColor: c + "33"});
+  return [band("lo", false), band("hi", "-1"), line];         // "-1": fill down to the previous dataset (the low edge)
+}
+const colLabel = col => `${engTag(col.run.cfg)}${isFloor(col.run.cfg) ? " floor" : ""}`;
+// The part of a run's label that every column shares (setup), so it can be said once instead of in every entry.
+function sharedSetup(cols) {
+  const rest = col => runLabel(col.run, true).split(" · ").slice(1).join(" · ");
+  const r = cols.length ? rest(cols[0]) : "";
+  return cols.length > 1 && cols.every(c => rest(c) === r) ? r : null;
+}
+// Screen readers cannot see a canvas: each chart gets a one-line description of what it currently shows.
+function describe(id, text) { const c = $(id); if (c) { c.setAttribute("role", "img"); c.setAttribute("aria-label", text); } }
+
+function renderCharts() {
+  if (!haveChart) return;
+  const items = selRuns();
+  const cols = columns();
+  const shared = sharedSetup(cols);
+  $("legend").innerHTML = (shared ? `<span class="muted">All columns: ${esc(shared)}</span>` : "") + cols.map(col => `<span>${chip(col.id)}` +
+    `${esc(shared ? colLabel(col) : runLabel(col.run, true) + (isFloor(col.run.cfg) ? " · floor" : ""))}` +
+    (col.members.length > 1 ? ` <span class="muted">${col.members.length} repeats (line = median, band = lowest to highest)</span>`
+                             : ` <span class="muted">n=${col.members[0].a.analysis.summary.n_lag ?? "?"}</span>`) + "</span>").join("");
+  const ms = METRIC_SETS[$("metricset").value], log = $("logbars").checked, msN = ms.n || (s => s.n_lag);
+  const bars = charts.ch_bars;
+  bars.data.labels = ms.rows.map(r => r[0]);
+  // On a log axis a bar's LENGTH is not proportional to its value, so log mode draws dots instead.
+  bars.data.datasets = cols.map(col => ({label: colLabel(col) + (col.members.length > 1 ? ` (median of ${col.members.length})` : ""),
+    type: log ? "line" : "bar", showLine: false,
+    pointStyle: shape(col.id), pointRadius: 7, pointHoverRadius: 9, backgroundColor: color(col.id), borderColor: color(col.id),
+    borderRadius: 4, data: ms.rows.map(r => {
+      const st = stat3(col.members.map(m => { const s = m.a.analysis.summary; return enoughFor(r[2], msN(s)) ? r[1](s) : null; }));
+      return st ? pos(st.med) : null; })}));
+  bars.options.scales.y.type = log ? "logarithmic" : "linear";
+  bars.options.scales.y.ticks.callback = log ? logTick : fmtAxisUs;
+  bars.options.scales.y.beginAtZero = !log;
+  bars.update("none");
+  // Intrusion and kernel RTT percentile curves share one x range, so the two charts can be read side by side.
+  let xmax = tailX(0.99);
+  // The max of n samples behaves like the 1 - 1/n quantile, so it is drawn at log10(n). A percentile a run has too
+  // few packets for (n < 10 / (1 - q)) is left out instead of drawing a number that is really the max.
+  const pctSets = (list, key) => cols.flatMap(col => {
+    const ns = col.members.map(m => m.a.analysis.summary.n_lag || 1), nMed = median(ns);
+    const qs = [...new Set(col.members.flatMap(m => (m.a.analysis[list] || []).map(q => q.q)))].sort((a, b) => a - b);
+    const pts = qs.map(qv => {
+      const st = stat3(col.members.map((m, i) => {
+        const q = (m.a.analysis[list] || []).find(z => z.q === qv);
+        return q && (qv === 1 || enoughFor(qv, ns[i])) ? pos(q[key]) : null; }));
+      return st && {x: qv === 1 ? Math.log10(Math.max(nMed, 2)) : tailX(qv), ...st,
+                    text: qLabel(qv) + (qv === 1 ? ` (n=${Math.round(nMed)})` : "") + (st.n > 1 ? ` · median of ${st.n}` : "")};
+    }).filter(Boolean).sort((a, b) => a.x - b.x);
+    if (pts.length) xmax = Math.max(xmax, pts[pts.length - 1].x);
+    return bandDatasets(col, pts, colLabel(col));
+  });
+  charts.ch_pct.data.datasets = pctSets("quantiles", "lag_us");
+  charts.ch_kpct.data.datasets = pctSets("kernel_quantiles", "rtt_us");
+  for (const ch of [charts.ch_pct, charts.ch_kpct]) { ch.options.scales.x.max = Math.ceil(xmax * 2) / 2; ch.update("none"); }
+  charts.ch_hist.data.labels = items.length ? items[0].a.analysis.hist.labels : [];
+  charts.ch_hist.data.datasets = cols.map(col => {
+    const shares = col.members.map(m => { const c = m.a.analysis.hist.counts, tot = c.reduce((a, b) => a + b, 0) || 1; return c.map(v => 100 * v / tot); });
+    return {label: colLabel(col) + (col.members.length > 1 ? ` (median of ${col.members.length})` : ""), backgroundColor: color(col.id),
+      borderRadius: 3, data: shares[0].map((_, b) => median(shares.map(sh => sh[b])))};
+  });
+  charts.ch_hist.update("none");
+  // Each run has its own time axis (ms since ITS first ping), so overlaying runs hides the pattern this chart is for.
+  // Default: only the drill-down run, whose ORM work is shaded behind its dots.
+  const timeRuns = $("timeall").checked ? items : items.filter(x => x.id === focus).concat(items.some(x => x.id === focus) ? [] : items.slice(0, 1));
+  charts.ch_time.data.datasets = timeRuns.map(x => ({label: runLabel(x.run, true), backgroundColor: color(x.id) + "aa", borderColor: color(x.id),
+    pointStyle: shape(x.id), pointRadius: 3, data: x.a.analysis.scatter.map(p => ({x: p[0], y: pos(p[1])})).filter(p => p.y != null)}));
+  $("timewhich").textContent = !timeRuns.length ? "" : $("timeall").checked ? `all ${timeRuns.length} selected runs`
+    : `${runLabel(timeRuns[0].run)} (the drill-down run)`;
+  const fa = sel.includes(focus) && analyses[focus];
+  charts.ch_time.$shade = fa ? {windows: fa.analysis.bursts || [], color: color(focus) + "30"} : null;
+  charts.ch_time.update("none");
+  // Spread across repeats: one dot per run of each column (jittered sideways so they do not hide each other),
+  // and a wide dash at the column's median.
+  const [sLabel, sGet, sUnit] = SPREAD_METRICS[$("spreadmetric").value || "p95"];
+  const sp = charts.ch_spread;
+  sp.$cols = cols.map(col => [`${SHAPE_GLYPH[slot(col.id)]} ${engTag(col.run.cfg)}${isFloor(col.run.cfg) ? " floor" : ""}`,
+    ...runLabel(col.run, true).split(" · ").slice(1), col.members.length > 1 ? `${col.members.length} repeats` : "1 run"]);
+  sp.data.datasets = cols.flatMap((col, i) => {
+    const vals = col.members.map(m => sGet(m.a.analysis.summary)).filter(v => v != null && isFinite(v));
+    const fmt = v => sUnit === "%" ? fmtPct(v) : fmtUs(v);
+    const dots = {label: `${engTag(col.run.cfg)} (repeat)`, backgroundColor: color(col.id), borderColor: color(col.id), pointStyle: shape(col.id),
+      pointRadius: 5, data: vals.map((v, j) => ({x: i + (vals.length > 1 ? (j / (vals.length - 1) - 0.5) * 0.3 : 0), y: v, text: fmt(v)}))};
+    const med = vals.length > 1 ? median(vals) : null;     // a single run has no spread: no median dash
+    return med == null ? [dots] : [dots, {label: `${engTag(col.run.cfg)} median`, pointStyle: "line", pointRadius: 18, borderWidth: 3,
+      borderColor: css("--text"), backgroundColor: css("--text"), data: [{x: i, y: med, text: fmt(med) + ` (median of ${vals.length})`}]}];
+  });
+  sp.options.scales.x.max = cols.length - 0.5;
+  sp.options.scales.y.title.text = sUnit;
+  sp.update("none");
+  $("spreadnote").classList.toggle("errtxt", !cols.some(c => c.members.length > 1));
+  const at = (ys, xp) => { const n = ys.length; if (!n) return null; const f = xp / 100 * (n - 1), i = Math.floor(f);
+    return i >= n - 1 ? ys[n - 1] : ys[i] + (ys[i + 1] - ys[i]) * (f - i); };
+  charts.ch_rank.data.datasets = cols.flatMap(col => {
+    const curves = col.members.map(m => m.a.analysis.endpoints.map(e => e.lag_mean_us).filter(v => pos(v) != null));
+    const pts = Array.from({length: 51}, (_, k) => k * 2).map(xp => { const st = stat3(curves.map(ys => at(ys, xp))); return st && {x: xp, ...st}; }).filter(Boolean);
+    return bandDatasets(col, pts, colLabel(col), {pointRadius: 0});
+  });
+  charts.ch_rank.update("none");
+  charts.ch_canary.data.datasets = cols.flatMap(col => {
+    const tls = col.members.map(m => m.a.timeline || []).filter(t => t.length), len = Math.max(0, ...tls.map(t => t.length));
+    const pts = Array.from({length: len}, (_, i) => { const st = stat3(tls.map(t => t[i] ? t[i].max / 1000 : null));
+      return st && {x: median(tls.filter(t => t[i]).map(t => t[i].t)), ...st}; }).filter(Boolean);
+    return pts.length ? bandDatasets(col, pts, colLabel(col), {pointRadius: 0, borderWidth: 1.5}) : [];
+  });
+  charts.ch_canary.update("none");
+  const noCanary = items.filter(x => !(x.a.timeline || []).length);
+  $("ch_canary").parentElement.hidden = !!items.length && noCanary.length === items.length;    // empty axes look broken
+  $("canarynote").textContent = !items.length ? "" : noCanary.length === items.length
+    ? "No canary timeline was recorded for the selected runs (runs imported from the terminal runner have none). Their canary summary is in the comparison table."
+    : noCanary.length ? `No canary timeline for: ${noCanary.map(x => runLabel(x.run, true)).join("; ")}.` : "";
+  renderSweep(items);
+  const perCol = f => cols.map(col => `${colLabel(col)} ${f(col)}`).join("; ");
+  const medOf = (col, g) => { const st = stat3(col.members.map(m => g(m.a.analysis.summary))); return st ? fmtUs(st.med) : "n/a"; };
+  describe("ch_bars", `Key metrics (${METRIC_SETS[$("metricset").value].label}) per column. ` + perCol(col => "mean intrusion " + medOf(col, s => s.lag_mean_us)));
+  describe("ch_pct", "Observer intrusion at each percentile per column: " + perCol(col => `p50 ${medOf(col, s => s.lag_p50_us)}, p95 ${medOf(col, s => s.lag_p95_us)}`));
+  describe("ch_kpct", "Kernel RTT at each percentile per column: " + perCol(col => `mean ${medOf(col, s => s.kernel_rtt_mean_us)}`));
+  describe("ch_hist", "Share of packets per intrusion bucket, per column. The comparison table has the same figures as numbers.");
+  describe("ch_time", `Intrusion of every packet over time for ${$("timewhich").textContent}; shaded bands mark the ORM work.`);
+  describe("ch_rank", "Mean intrusion of each endpoint, worst to best, per column: " + perCol(col => "worst " + medOf(col, s => s.lag_max_us)));
+  describe("ch_spread", `One dot per repeat of ${SPREAD_METRICS[$("spreadmetric").value || "p95"][0]} per column, dash at the median.`);
+  describe("ch_canary", "Worst lateness of the 10 ms scheduler timer in each half second, per column.");
+}
+
+// Sweep: one figure against one setting, across the selected test runs. Dots are runs; the line per engine
+// (and CPU mode) joins the median at each setting value.
+function renderSweep(items) {
+  const tests = items.filter(x => !isFloor(x.run.cfg));
+  const [yl, yGet, yUnit] = SPREAD_METRICS[$("sweepy").value || "p95"];
+  const fmt = v => yUnit === "%" ? fmtPct(v) : fmtUs(v);
+  // Only runs that have this figure take part (a percentile needs enough packets).
+  const usable = tests.filter(x => { const y = yGet(x.a.analysis.summary); return y != null && isFinite(y); });
+  const values = k => [...new Set(usable.map(x => settingOf(x.run.cfg, k)))];
+  const varies = k => values(k).length > 1;
+  let xk = $("sweepx").value;
+  if (xk === "auto") xk = (SWEEP_X.find(([k]) => varies(k)) || SWEEP_X[2])[0];
+  const xl = SWEEP_X.find(([k]) => k === xk)[1];
+  const pts = usable.map(x => ({x, xv: x.run.cfg[xk], y: yGet(x.a.analysis.summary)})).filter(p => p.xv != null);
+  const ch = charts.ch_sweep;
+  const dots = pts.map(p => ({label: runLabel(p.x.run, true), backgroundColor: color(p.x.id), borderColor: color(p.x.id), pointStyle: shape(p.x.id),
+    pointRadius: 6, data: [{x: +p.xv, y: yUnit === "%" ? p.y : pos(p.y), text: `${xl} ${+p.xv} → ${fmt(p.y)}`}]}));
+  const byEngine = new Map();
+  for (const p of pts) { const k = engTag(p.x.run.cfg); if (!byEngine.has(k)) byEngine.set(k, {cfg: p.x.run.cfg, at: new Map()});
+    const at = byEngine.get(k).at; if (!at.has(+p.xv)) at.set(+p.xv, []); at.get(+p.xv).push(p.y); }
+  const lines = [...byEngine].filter(([, g]) => g.at.size > 1).map(([k, g]) => ({label: `${k} median`, showLine: true, pointRadius: 0,
+    borderColor: css("--text2"), borderDash: ENGINE_DASH[g.cfg.engine || "python"], borderWidth: (g.cfg.cpu_mode === "multi_core") ? 1.5 : 2.5,
+    data: [...g.at].sort((a, b) => a[0] - b[0]).map(([v, ys]) => ({x: v, y: median(ys), text: `${xl} ${v} → ${fmt(median(ys))} (median of ${ys.length})`}))}));
+  ch.data.datasets = [...lines, ...dots];
+  ch.options.scales.x.title.text = xl;
+  ch.options.scales.y.type = yUnit === "%" ? "linear" : "logarithmic";
+  ch.options.scales.y.ticks.callback = yUnit === "%" ? (v => v + " %") : logTick;
+  ch.options.scales.y.title.text = yl;
+  // Pad both axes so dots at the first and last value are not cut in half by the chart edge.
+  const xs = pts.map(p => +p.xv), ys = pts.map(p => p.y).filter(v => v > 0), xr = (Math.max(...xs) - Math.min(...xs)) || 1;
+  ch.options.scales.x.min = xs.length ? Math.min(...xs) - 0.05 * xr : undefined;
+  ch.options.scales.x.max = xs.length ? Math.max(...xs) + 0.05 * xr : undefined;
+  ch.options.scales.y.min = ys.length && yUnit !== "%" ? Math.min(...ys) / 1.4 : undefined;
+  ch.options.scales.y.max = ys.length && yUnit !== "%" ? Math.max(...ys) * 1.4 : undefined;
+  ch.update("none");
+  const nx = new Set(pts.map(p => +p.xv)).size;
+  $("ch_sweep").parentElement.hidden = nx < 2;              // one value only: an axis around it means nothing
+  describe("ch_sweep", nx < 2 ? "No setting varies between the selected runs." : `${yl} against ${xl} over ${nx} values.`);
+  const others = CHECK.filter(([k]) => k !== xk && varies(k)).map(([k, l]) => `${l} (${values(k).join(" / ")})`);
+  const missing = tests.length - pts.length;
+  $("sweepnote").textContent = !tests.length ? "" : [
+    nx < 2 ? `The plotted runs all have the same ${xl}: select runs that differ in it to see a trend.` : "",
+    others.length ? `Not a clean sweep: these settings also differ, so the trend may come from them: ${others.join("; ")}.` : "",
+    missing ? `${missing} run(s) left out: too few packets for this figure, or it was not recorded.` : ""].filter(Boolean).join(" ");
+}
+
+// ---------------- focus run ----------------
+const CARDS = [
+  {t: "Kernel RTT (mean)", f: s => fmtUs(s.kernel_rtt_mean_us), s: s => "wire + OS arrival (Clock A)"},
+  {t: "Observer RTT (mean)", f: s => fmtUs(s.python_rtt_mean_us), s: s => "runtime's own clock (Clock B)"},
+  {t: "Observer intrusion (mean)", f: s => fmtUs(s.lag_mean_us), s: s => `p95 ${fmtUs(s.lag_p95_us)} · p99 ${fmtUs(s.lag_p99_us)} · max ${fmtUs(s.lag_max_us)}`},
+  {t: "Error vs kernel RTT", f: s => s.rtt_too_small ? "not meaningful" : fmtPct(s.pct_total),
+   s: s => s.rtt_too_small ? `median kernel RTT ${fmtUs(s.kernel_rtt_median_us)} is under 100 µs: even an ordinary wake-up is a large percentage, so judge the lag in µs`
+                           : `total lag ÷ total RTT · per packet: median ${fmtPct(s.pct_median)}, mean ${fmtPct(s.pct_mean)}, max ${fmtPct(s.pct_max)}`},
+  {t: "Intrusion above idle floor", f: s => s.floor ? fmtAbove(above(s, "lag_mean_us")) : "n/a",
+   s: s => s.floor ? `p95 ${fmtUs(above(s, "lag_p95_us"))} · floor mean ${fmtUs(s.floor.lag_mean_us)} (run at ${hhmmss(s.floor.started_at)})`
+                   : "no idle-floor run for this setup yet (use “Measure idle floor”)"},
+  {t: "Cycle jitter (RFC 3550)", f: s => `${fmtUs(s.jitter_kernel_us)} → ${fmtUs(s.jitter_python_us)}`, s: s => "kernel clock → observer clock"},
+  {t: "Reader wakeups vs packets", f: s => s.reader_calls == null ? "n/a" : `${s.reader_calls} / ${s.replied}`,
+   s: s => s.reader_calls == null ? "not recorded for this run"
+        : s.packets_per_wakeup == null ? "no replies were read"          // e.g. every ping lost: reader_calls is 0
+        : `${s.packets_per_wakeup.toFixed(2)} per wakeup · max queue ${fmtInt(s.max_batch)}`},
+  {t: "Canary max lag", f: s => s.canary ? fmtUs(s.canary.max_lag_us) : "n/a", s: s => s.canary ? `avg ${fmtUs(s.canary.avg_lag_us)} · p95 ${fmtUs(s.canary.p95_lag_us)}` : "not recorded for this run"},
+  {t: "ORM offload overhead", f: s => s.ipc_ms_mean == null ? "n/a" : fmtUs(s.ipc_ms_mean * 1000), s: s => s.ipc_ms_mean == null ? "ORM ran in-process" : `IPC + pool wait · max ${fmtUs(s.ipc_ms_max * 1000)}`},
+  {t: "Loss by cause", f: s => `${s.lost} / ${s.sent} lost`,
+   s: s => s.lost ? `no reply ${s.lost_no_reply ?? "?"} · after timeout ${s.lost_after_timeout ?? "?"} · in time but read too late ${s.lost_read_late ?? "?"}` : "nothing lost"},
+  {t: "Send lag (mean)", f: s => fmtUs(s.send_lag_mean_us),
+   s: s => s.send_lag_mean_us == null ? "not recorded for this run" : `p95 ${fmtUs(s.send_lag_p95_us)} · max ${fmtUs(s.send_lag_max_us)} · ping sent late vs schedule`},
+  {t: "Dashboard stream cost", f: s => s.emit_us_per_event == null ? "n/a" : `${s.emit_us_per_event.toFixed(0)} µs`, s: s => "per progress event written by the prober"},
+];
+
+function renderFocus() {
+  const sl = $("focus");
+  sl.innerHTML = sel.map(id => runById(id) ? `<option value="${esc(id)}">${esc(runLabel(runById(id)))}</option>` : "").join("");
+  if (focus) sl.value = focus;
+  const a = analyses[focus], r = runById(focus);
+  const disabled = !r || r.status === "running" || r.status === "starting";
+  $("save").disabled = disabled || !!(r && r.saved_as);
+  $("save").textContent = r && r.saved_as ? "✔ Saved" : "💾 Save to test_results/";
+  for (const [id, k] of [["exp_pk", "packets.csv"], ["exp_ep", "endpoints.csv"], ["exp_md", "report.md"]]) {
+    const el = $(id); el.href = r ? `/api/runs/${encodeURIComponent(r.id)}/export/${k}` : "#";
+    el.style.opacity = r ? 1 : .4; el.style.pointerEvents = r ? "auto" : "none";
+  }
+  $("savenote").disabled = !r; $("focusnote").disabled = !r;
+  if (!a || !r) { $("cards").innerHTML = '<div class="muted">Select a run above.</div>'; $("worst").innerHTML = ""; $("runinfo").textContent = ""; $("hostinfo").textContent = ""; return; }
+  const c = r.cfg || {}, s = a.analysis.summary;
+  $("runinfo").textContent = `${r.name} · ${({python: "Python asyncio", go: "Go goroutines", rust: "Rust tokio"})[c.engine || "python"]} (${c.cpu_mode || "single_core"}) · clock: ${r.clock || "n/a"}` +
+    (c.hw_timestamps ? " · NIC hardware stamps ON" : "") + (r.error ? ` · ERROR: ${r.error}` : "");
+  $("cards").innerHTML = CARDS.map(k => `<div class="card"><div class="t">${esc(k.t)}</div><div class="v">${esc(k.f(s))}</div><div class="s">${esc(k.s(s))}</div></div>`).join("");
+  const notes = [];
+  if (s.warmup_cycles_excluded) notes.push(`Cycle 0 of ${c.cycles} is a warm-up (the schedule is still ramping up) and is excluded from every figure; it is kept in the saved files.`);
+  if (a.meta && a.meta.canary_note) notes.push(a.meta.canary_note);
+  $("cardnote").textContent = notes.join(" ");
+  if (document.activeElement !== $("focusnote")) $("focusnote").value = c.note || "";
+  const host = (a.meta && a.meta.host) || null;
+  $("hostinfo").innerHTML = !host ? "Host conditions: not recorded for this run."
+    : host.warnings && host.warnings.length
+      ? `<b>Host conditions that can affect this run</b> (${esc((host.cpu || {}).model || "")}, kernel ${esc(host.kernel || "?")}):<ul class="hostwarn">` +
+        host.warnings.map(w => `<li>${esc(w)}</li>`).join("") + "</ul>"
+      : `Host conditions: nothing flagged (${esc((host.cpu || {}).model || "")}, governor ${esc((host.cpu || {}).governor || "?")}).`;
+  if (haveChart) {
+    const eps = a.analysis.endpoints.filter(e => e.lag_mean_us != null);
+    const ch = charts.ch_ep; ch._eps = eps;
+    ch.data.labels = eps.map(e => "EP " + e.ep);
+    ch.data.datasets[0].data = eps.map(e => e.kernel_us / 1000);
+    ch.data.datasets[1].data = eps.map(e => e.lag_mean_us / 1000);
+    const io = $("chmode").value === "intr";
+    ch.data.datasets[0].hidden = io; ch.options.scales.y.title.text = io ? "ms of intrusion" : "ms";
+    ch.update("none");
+  }
+  $("worst").innerHTML = `<table><thead><tr><th>Endpoint</th><th>Kernel RTT</th><th>Observer RTT</th><th>Intrusion (mean)</th>
+    <th>Intrusion (max)</th><th>% Error</th><th>Reader wakeups</th></tr></thead><tbody>` + a.analysis.worst.map(e => `<tr class="${e.pct_total > 25 ? "hot" : ""}">
+    <td>EP ${e.ep}</td><td>${fmtUs(e.kernel_us)}</td><td>${fmtUs(e.python_us)}</td><td>${fmtUs(e.lag_mean_us)}</td><td>${fmtUs(e.lag_max_us)}</td>
+    <td>${fmtPct(e.pct_total)}</td><td>${e.wakeups == null ? "n/a" : e.wakeups} ${e.max_batch ? `<span class="muted">(max queue ${e.max_batch})</span>` : ""}</td></tr>`).join("") + "</tbody></table>";
+}
+
+// ---------------- render all ----------------
+let raf = 0;
+function renderAll() {
+  cancelAnimationFrame(raf);
+  raf = requestAnimationFrame(() => { renderRuns(); renderManage(); renderWarn(); renderMatrix(); renderCharts(); renderFocus(); });
+}
+
+// ---------------- status / websocket ----------------
+function setStatus(run) {
+  const st = run ? run.status : "idle", el = $("status");
+  el.textContent = st; el.className = "pill " + (st === "running" || st === "starting" ? "running" : st === "error" ? "error" : "");
+  const busy = st === "running" || st === "starting";
+  $("start").disabled = busy; $("stop").disabled = !busy;
+  $("bar").parentElement.hidden = !busy && !parseFloat($("bar").style.width);    // an empty track looks broken
+  $("clockinfo").textContent = run && run.clock ? `Clock A: ${run.clock} · route ${(run.routes || []).map(r => `${r.target} via ${r.interface}`).join(", ")}` : "";
+}
+function onState(m) {
+  runs = m.runs; current = m.current;
+  if (m.defaults) { EPHEMRES = m.defaults; updateFormNote(); }
+  $("batchinfo").textContent = m.batch ? `Batch ${m.batch.id}: ${m.batch.done} of ${m.batch.total} runs finished` : "";
+  // A batch starts its next run by itself: add it to the selection so the comparison fills in as it goes.
+  const cur = m.current;
+  if (cur && cur.cfg && cur.cfg.series_id && !sel.includes(cur.id) && (cur.status === "running" || cur.status === "starting")
+      && combineOn() && sel.length < MAX_SEL && columnsFor([...sel, cur.id].filter(id => runById(id) || id === cur.id)) <= MAX_COLS) {
+    if (!runById(cur.id)) runs.push(cur);
+    sel = [...sel, cur.id]; focus = cur.id; store.set("sel", sel);
+  }
+  const b = $("banner");
+  const msgs = [];
+  if (!m.root) msgs.push("The dashboard is not running as root, so runs cannot open the raw ICMP socket. Restart with: sudo .venv/bin/python -m server.app");
+  for (const p of m.problems || []) msgs.push("Left over from an earlier session: " + p);
+  b.className = "banner err" + (msgs.length ? " show" : "");
+  b.innerHTML = msgs.map(esc).join("<br>");
+  const sv = m.server;
+  if (sv) $("meminfo").innerHTML = `server ${esc(sv.rss_mb)} MB · ${esc(sv.runs)} runs · ${esc(sv.packets_in_memory.toLocaleString())} packets in memory` +
+    ` · auto-save ${m.autosave ? "on" : '<b class="errtxt">off</b>'}` +
+    (sv.unsaved_runs ? ` · <b class="errtxt">${esc(sv.unsaved_runs)} unsaved</b>` : "");
+  $("saveall").disabled = !(sv && sv.unsaved_runs);
+  setStatus(current);
+  if (m.engines) { ENGINES_OK = m.engines; refreshEngineBoxes(); }
+  if (m.engines) for (const o of $("engine").options) {
+    const ok = m.engines[o.value] !== false; o.disabled = !ok;
+    o.text = o.text.replace(/ \(not built.*\)$/, "") + (ok ? "" : " (not built: run ./build_workers.sh)");
+  }
+  sel = sel.filter(id => runById(id));
+  if (!sel.includes(base)) base = sel[0] || null;
+  if (!focus || !sel.includes(focus)) focus = base;
+  Promise.all(sel.filter(id => !analyses[id]).map(ensureAnalysis)).then(renderAll);
+  renderAll();
+}
+async function handle(m) {
+  if (m.type === "state") onState(m);
+  else if (m.type === "live") {
+    const id = m.run.id;
+    analyses[id] = {analysis: m.analysis, timeline: m.timeline, meta: {}};
+    if (!runById(id)) runs.push(m.run); else Object.assign(runById(id), m.run);
+    if (m.tick) {
+      const exp = m.run.expected || 1;
+      $("bar").style.width = Math.min(100, 100 * m.tick.sent / exp) + "%";
+      $("progtxt").textContent = `${m.tick.sent}/${exp} sent · ${m.tick.replied} replied · ${m.tick.t}s`;
+    }
+    setStatus(m.run); renderAll();
+  } else if (m.type === "done") {
+    analyses[m.run.id] = {analysis: m.analysis, timeline: m.timeline, meta: {}};
+    await ensureAnalysis(m.run.id);
+    onState(m.state);
+    $("bar").style.width = m.run.status === "done" ? "100%" : $("bar").style.width;
+    $("progtxt").textContent = m.run.status + (m.run.error ? ": " + m.run.error : "");
+    renderAll();
+  }
+}
+function connect() {
+  const ws = new WebSocket((location.protocol === "https:" ? "wss://" : "ws://") + location.host + "/ws");
+  ws.onopen = () => { $("status").textContent = "connected"; };
+  ws.onclose = () => { $("status").textContent = "disconnected – retrying"; setTimeout(connect, 2000); };
+  ws.onmessage = ev => handle(JSON.parse(ev.data));
+}
+
+// ---------------- form validation ----------------
+// Field label + unit for each request key, used for both client-side checks and server errors.
+const FIELDS = {targets: ["Targets", "", "targets"], virtual_endpoints: ["Virtual endpoints", "", "endpoints"],
+  pings_per_cycle: ["Pings per cycle", "", "pings"], interval_s: ["Ping interval", " s", "interval"],
+  stagger_window_s: ["Stagger window", " s", "stagger"], db_write_semaphore: ["db_write_semaphore", "", "semaphore"],
+  simulated_db_ms: ["Simulated DB work", " ms", "dbms"], note: ["Note", "", "note"], tag: ["Series tag", "", "tag"],
+  engine: ["Engine", "", "engine"], cpu_mode: ["CPU core mode", "", "cpumode"], timeout_s: ["Reply timeout", " s", "timeout"],
+  cycles: ["Cycles per endpoint", "", "cycles"], cycle_length_s: ["Cycle length", " s", "cyclelen"],
+  hw_timestamps: ["NIC hardware timestamps", "", "hw"]};
+const NUMBER_FIELDS = ["pings_per_cycle", "interval_s", "timeout_s", "cycles", "cycle_length_s"];
+const WHOLE = new Set(["pings_per_cycle", "cycles"]);
+
+// Typed-in number boxes do not enforce min/max on their own (only sliders do), so check them here.
+// Only the range is checked, not the "step": the server accepts any value in range (e.g. 0.33 s).
+function formProblems(body) {
+  const out = [];
+  if (!String(body.targets).trim()) out.push({key: "targets", msg: "Targets: enter at least one IPv4 address"});
+  for (const key of NUMBER_FIELDS) {
+    const [label, unit, id] = FIELDS[key], el = $(id), v = body[key];
+    const lo = +el.min, hi = +el.max;
+    if (el.value.trim() === "" || !Number.isFinite(v)) out.push({key, msg: `${label}: enter a number`});
+    else if (v < lo || v > hi) out.push({key, msg: `${label} must be between ${lo} and ${hi}${unit} (got ${v}${unit})`});
+    else if (WHOLE.has(key) && !Number.isInteger(v)) out.push({key, msg: `${label} must be a whole number`});
+  }
+  if (out.length) return out;
+  const busy = (body.pings_per_cycle - 1) * body.interval_s + body.timeout_s;    // one cycle's pings, worst case
+  if (body.cycles > 1 && body.cycle_length_s < busy)
+    out.push({key: "cycle_length_s", msg: `Cycle length must be at least ${+busy.toFixed(2)} s: one cycle's pings take (pings − 1) × interval + timeout = ${+busy.toFixed(2)} s`});
+  if (body.hw_timestamps && body.engine !== "python")
+    out.push({key: "hw_timestamps", msg: "NIC hardware timestamps exist only in the Python engine"});
+  return out;
+}
+
+// FastAPI returns validation errors as [{loc: ["body", "interval_s"], msg, ctx}]; other errors as a string.
+function serverProblems(detail, status) {
+  if (!Array.isArray(detail)) return [{key: null, msg: typeof detail === "string" ? detail : `request failed (HTTP ${status})`}];
+  return detail.map(d => {
+    const key = (d.loc || []).slice(-1)[0], [label, unit] = FIELDS[key] || [key, ""], c = d.ctx || {};
+    const range = c.ge != null && c.le != null ? ` must be between ${c.ge} and ${c.le}${unit}`
+      : c.le != null ? ` must be at most ${c.le}${unit}` : c.ge != null ? ` must be at least ${c.ge}${unit}` : `: ${d.msg}`;
+    return {key, msg: label + range + (d.input !== undefined && range[0] === " " ? ` (got ${d.input}${unit})` : "")};
+  });
+}
+
+function showProblems(problems) {
+  document.querySelectorAll(".invalid").forEach(el => el.classList.remove("invalid"));
+  $("progtxt").textContent = problems.length ? "Cannot start: " + problems.map(p => p.msg).join("; ") : "";
+  $("progtxt").classList.toggle("errtxt", problems.length > 0);
+  const els = problems.map(p => FIELDS[p.key] && $(FIELDS[p.key][2])).filter(Boolean);
+  els.forEach(el => el.classList.add("invalid"));
+  if (els.length) els[0].focus();
+}
+
+
+// ---------------- glossary (single source for the Research tab AND the hover tooltips) ----------------
+// ---------------- every control, documented once ----------------
+// The single source for the Research tab's "Controls reference" AND the hover tooltips on the Lab tab
+// (docs/09-replication.md repeats it for readers outside the dashboard; tests/test_controls_documented.py
+// checks both cover every control). Fields: id (element id; null = no single element), name, section,
+// what it does, default, range, the Ephemres value, and its role when comparing runs:
+//   variable    = what you compare (it may differ between compared runs)
+//   must match  = keep it identical across runs you compare, or the comparison is not like for like
+//   label       = bookkeeping only, never changes the measurement
+//   view only   = changes what you see, not what was measured
+//   action      = a button
+const CONTROLS = [
+  // --- 1 · Run a test: what is measured
+  {id: "targets", name: "Targets", section: "Run configuration", def: "empty; then the last target you used in this browser", range: "1-32 IPv4 addresses, comma-separated; ranges like 10.0.0.1-10.0.0.20", eph: "its monitored devices", role: "must match",
+   what: "The device(s) to ping. Endpoints are spread over them round-robin. Use a LAN device that answers ping with no loss; 127.0.0.1 is only a functional check (its true RTT is a few µs)."},
+  {id: "engine", name: "Language engine", section: "Run configuration", def: "Python", range: "Python (asyncio) · Go (goroutines) · Rust (tokio)", eph: "Python", role: "variable",
+   what: "The engine that does the probing in a SINGLE run. In a batch it is always one of the engines (see Batch engines). All three send identical packets, keep identical schedules and are analysed by the same code."},
+  {id: "cpumode", name: "CPU core mode", section: "Run configuration", def: "Single-Core", range: "Single-Core (1 CPU pinned) · Multi-Core", eph: "single thread (1-vCPU GNS3 baseline)", role: "variable",
+   what: "Single-Core: the engine is pinned to one core (Python and Rust: one thread does everything; Go: GOMAXPROCS=1). Multi-Core: Go and Rust use every core; Python keeps its event loop on one core and sends the ORM work to a pool of worker processes (CPUs − 1), and the cost of that hand-over is reported as ORM offload overhead. Run every engine in both modes: 3 engines × 2 modes = 6 combinations."},
+  {id: "endpoints", name: "Virtual endpoints", section: "Run configuration", def: "100", range: "1-500", eph: "100 (the scale at which the problem was seen)", role: "must match",
+   what: "How many simulated monitored devices run at once. Each has its own ICMP identifier, so hundreds can share one target. More endpoints = more work competing for the engine's attention."},
+  {id: "stagger", name: "Stagger window", section: "Run configuration", def: "60 s", range: "0-120 s on the slider (API: 0-600 s); 0 = burst", eph: "60 s (each endpoint starts at a second 0-59)", role: "must match",
+   what: "Endpoint i of N starts at window × i / N seconds. 0 = burst: every endpoint at once, the worst case, which can also overload the target and change the real RTT."},
+  {id: "semaphore", name: "db_write_semaphore", section: "Run configuration", def: "15", range: "1-100", eph: "15 (tuned from 4 for ICMP accuracy)", role: "must match",
+   what: "The most endpoints allowed in the database-write step at the same moment. On one thread their CPU work runs back to back, so the worst stall is about semaphore × simulated DB work (15 × 3 ms = 45 ms)."},
+  {id: "dbms", name: "Simulated DB work", section: "Run configuration", def: "3 ms", range: "0-15 ms in 0.5 ms steps", eph: "3 ms (the lab's estimate)", role: "must match",
+   what: "Milliseconds of CPU spent preparing each endpoint's database write (statistics, state machine, ORM objects). It keeps the thread busy, so other endpoints' replies wait. 0 = none: that is the idle floor."},
+  {id: "pings", name: "Pings per cycle", section: "Run configuration", def: "5", range: "1-20 (cycles × pings ≤ 65536)", eph: "5", role: "must match",
+   what: "How many pings one endpoint sends per cycle before its database write."},
+  {id: "interval", name: "Ping interval", section: "Run configuration", def: "8 s", range: "0.05-30 s", eph: "8 s", role: "must match",
+   what: "Seconds between one endpoint's pings. With 8 s, a cycle's pings span 32 s, so many endpoints are mid-cycle at once, as in Ephemres."},
+  {id: "timeout", name: "Reply timeout", section: "Run configuration", def: "2 s", range: "0.1-10 s", eph: "(lab value)", role: "must match",
+   what: "How long to wait for a reply before counting the ping as lost. A reply that comes later is still recorded as late, so loss can be split into real loss and loss caused by reading too late."},
+  {id: "cycles", name: "Cycles per endpoint", section: "Run configuration", def: "3", range: "1-60", eph: "runs continuously", role: "must match",
+   what: "How many times each endpoint repeats pings + database write. With more than one, cycle 0 is a warm-up (endpoints still starting) and is left out of every statistic."},
+  {id: "cyclelen", name: "Cycle length", section: "Run configuration", def: "60 s", range: "1-600 s, and at least (pings − 1) × interval + timeout", eph: "60 s", role: "must match",
+   what: "Seconds from the start of one cycle to the start of the next, for the same endpoint. Only matters with more than one cycle."},
+  {id: "hw", name: "NIC hardware timestamps", section: "Run configuration", def: "off", range: "Python engine only; needs root and a NIC that supports it", eph: "off", role: "must match (keep off across engines)",
+   what: "Also record the network card's own receive stamp (a different clock, for cross-checking with tcpdump only). It changes a setting on the card for the run, which Go and Rust never do, so leave it off for any run you compare across engines."},
+  // --- batch
+  {id: "repeats", name: "Repeat (rounds)", section: "Batch (repeated runs)", def: "1 (no batch)", range: "1-20", eph: "-", role: "label",
+   what: "Run the same setup this many rounds. More than 1 (or more than one batch engine, or idle floor every round) turns Start into Start batch: the dashboard runs every round itself. Use 5 rounds to report a difference (3 is enough only for a first look; see 'How many repeats a claim needs' in docs/02)."},
+  {id: "alt_python", name: "Batch engines (take turns each round)", section: "Batch (repeated runs)", def: "only the language engine", range: "any of Python, Go, Rust (built engines only)", eph: "-", role: "variable",
+   what: "Which engines a batch runs in every round. The language engine selected above is always included (its box is shown ticked and locked); tick others to compare engines in one batch. The order rotates each round (Py Go Rs, then Go Rs Py, then Rs Py Go) so a slow drift of the machine hits every engine equally. Ignored for a single run."},
+  {id: "withfloor", name: "Idle floor every round", section: "Batch (repeated runs)", def: "off", range: "on / off", eph: "-", role: "label",
+   what: "In every round, run each engine's idle floor (this setup with 0 ms ORM work) just before its test run, so each test is matched to a floor measured moments earlier. Doubles the number of runs."},
+  // --- labels
+  {id: "tag", name: "Series tag", section: "Labels", def: "empty (a batch uses its series id)", range: "≤ 24 characters; letters, digits, dashes", eph: "-", role: "label",
+   what: "A short label appended to the saved file name, to find a family of runs later (e.g. sem-sweep)."},
+  {id: "note", name: "What is this run checking?", section: "Labels", def: "empty", range: "≤ 300 characters", eph: "-", role: "label",
+   what: "One sentence on the question the run answers. Shown in the run table, the comparison and every export; editable after the run (drill-down)."},
+  // --- buttons
+  {id: "start", name: "Start run / Start batch", section: "Buttons", def: "-", range: "-", eph: "-", role: "action",
+   what: "Starts one run of the form's setup, or a batch when Repeat > 1, other batch engines are ticked, or idle floor every round is on. Values are checked first; the line under the form says how long it will take."},
+  {id: "stop", name: "Stop", section: "Buttons", def: "-", range: "-", eph: "-", role: "action",
+   what: "Interrupts the running probe (it still writes its summary and keeps the data, status 'stopped') and cancels the rest of a batch."},
+  {id: "floorbtn", name: "Measure idle floor", section: "Buttons", def: "-", range: "-", eph: "-", role: "action",
+   what: "Runs the form's setup once with 0 ms ORM work: the engine's idle floor for exactly this setup. Needed for 'subtract idle floor'."},
+  {id: "preset_ephemres", name: "Ephemres defaults", section: "Buttons", def: "-", range: "-", eph: "-", role: "action",
+   what: "Resets every run setting to Ephemres' configuration (100 endpoints, 5 pings 8 s apart, 2 s timeout, 60 s stagger, 3 cycles of 60 s, semaphore 15, 3 ms ORM, NIC stamps off)."},
+  {id: "preset_burst", name: "Burst (0 s)", section: "Buttons", def: "-", range: "-", eph: "-", role: "action",
+   what: "Sets the stagger window to 0: every endpoint starts at once (worst case)."},
+  // --- 2 · choosing runs
+  {id: null, name: "Run tick boxes and ● baseline", section: "Choosing runs", def: "baseline = first test run", range: "up to 8 columns", eph: "-", role: "view only",
+   what: "Tick runs to compare. The ● picks the baseline column: other columns also show their value as a multiple of it. An idle-floor run is never the default baseline."},
+  {id: "filter", name: "Filter", section: "Choosing runs", def: "empty", range: "any text", eph: "-", role: "view only",
+   what: "Shows only runs whose name, status or settings contain the text (e.g. 'go', a tag, a target)."},
+  {id: "groupby", name: "Group by scenario", section: "Choosing runs", def: "on", range: "on / off", eph: "-", role: "view only",
+   what: "Groups the run table by scenario: runs that asked the same question (same load and target) of any engine. 'Select all N' ticks a whole group."},
+  {id: "combine", name: "Combine repeats", section: "Choosing runs", def: "on", range: "on / off", eph: "-", role: "view only",
+   what: "Repeats of one setup (same batch, engine, CPU mode and role) become ONE column showing the median with the lowest-highest repeat underneath, and share one colour. Off: every run is its own column."},
+  {id: "managemode", name: "Manage results (save / delete)", section: "Managing results", def: "off", range: "on / off", eph: "-", role: "view only",
+   what: "Shows an extra tick column for saving or deleting runs, separate from the comparison ticks and without their 8-column limit. Turning it off unticks everything."},
+  {id: "mg_all", name: "Tick all shown", section: "Managing results", def: "-", range: "-", eph: "-", role: "action",
+   what: "Ticks every run the table shows right now; combine with the Filter (e.g. a tag, an engine or a date) to tick a whole family of runs."},
+  {id: "mg_none", name: "Untick all", section: "Managing results", def: "-", range: "-", eph: "-", role: "action", what: "Unticks every run in the manage column."},
+  {id: "mg_save", name: "Save ticked", section: "Managing results", def: "-", range: "-", eph: "-", role: "action",
+   what: "Saves the ticked runs that are not saved yet (already-saved ones are skipped)."},
+  {id: "mg_delete", name: "Delete ticked…", section: "Managing results", def: "-", range: "-", eph: "-", role: "action",
+   what: "After a confirmation that lists them, removes the ticked runs from the lab. Saved runs' files and INDEX.md entries are MOVED to test_results/.deleted/<date-time>/, so they can be restored by moving them back; delete that folder to make it permanent. Unsaved runs are discarded from memory. Running runs cannot be deleted."},
+  {id: "clearsel", name: "Clear", section: "Choosing runs", def: "-", range: "-", eph: "-", role: "action", what: "Unticks every run."},
+  {id: "saveall", name: "Save all unsaved", section: "Choosing runs", def: "-", range: "-", eph: "-", role: "action",
+   what: "Saves every finished run that is not saved yet. With auto-save on (the default) finished runs are saved by themselves; this is for runs made with --no-autosave, or a run whose auto-save failed."},
+  // --- 3 · comparison
+  {id: "showratio", name: "Show × baseline", section: "Comparison table", def: "on", range: "on / off", eph: "-", role: "view only",
+   what: "Adds each value as a multiple of the baseline column (0.50× = half the baseline)."},
+  {id: "abovefloor", name: "Subtract idle floor", section: "Comparison table", def: "off", range: "on / off", eph: "-", role: "view only",
+   what: "Adds rows with each run's intrusion minus that of its matching idle-floor run (the latest floor run of the same engine, mode, target and schedule). Raw figures stay; negative results are labelled noise."},
+  {id: "hlthr", name: "Mark best/worst when they differ by", section: "Comparison table", def: "≥ 10 %", range: "never, 5, 10, 25, 50 %", eph: "-", role: "view only",
+   what: "▼ best and ▲ worst appear only when the best and worst values differ by at least this much; with repeats, also only when their ranges do not overlap. Idle-floor columns never compete."},
+  {id: "exp_cmp_md", name: "⬇ Markdown (comparison)", section: "Comparison table", def: "-", range: "-", eph: "-", role: "action",
+   what: "Downloads the comparison as a Markdown table (repeats combined when 'combine repeats' is on), including each run's note."},
+  {id: "exp_cmp_csv", name: "⬇ CSV (comparison)", section: "Comparison table", def: "-", range: "-", eph: "-", role: "action",
+   what: "Downloads the comparison as CSV: one row per metric, one column per run, raw numbers."},
+  // --- charts
+  {id: "metricset", name: "Key metrics: metric set", section: "Charts", def: "Intrusion", range: "intrusion, RTT, jitter, send lag, canary", eph: "-", role: "view only",
+   what: "Which figures the 'Key metrics by run' chart shows."},
+  {id: "logbars", name: "Log scale (dots)", section: "Charts", def: "on", range: "on / off", eph: "-", role: "view only",
+   what: "Logarithmic axis for values from µs to tens of ms. On a log axis bars would mislead, so dots are drawn instead."},
+  {id: "timeall", name: "Intrusion over time: all selected runs", section: "Charts", def: "off (the drill-down run only)", range: "on / off", eph: "-", role: "view only",
+   what: "Off: the chart shows only the run picked in the drill-down, with its ORM work shaded, so stalls line up with their cause. On: every selected run is overlaid (each on its own time axis, ms since its first ping)."},
+  {id: "spreadmetric", name: "Spread across repeats: figure", section: "Charts", def: "Intrusion p95", range: "intrusion mean/p95/p99/max, error %, above-floor p95, send lag p95, canary max", eph: "-", role: "view only",
+   what: "Which figure the spread chart plots: one dot per repeat and a dash at the median, per column."},
+  {id: "sweepx", name: "Sweep: setting (x axis)", section: "Charts", def: "the setting that differs", range: "endpoints, stagger window, semaphore, ORM ms, pings per cycle, ping interval, cycle length", eph: "-", role: "view only",
+   what: "Which run setting the sweep chart puts on the x axis. 'The setting that differs' picks the first of these that varies between the selected test runs."},
+  {id: "sweepy", name: "Sweep: figure (y axis)", section: "Charts", def: "Intrusion p95", range: "intrusion mean/p95/p99/max, error %, above-floor p95, send lag p95, canary max", eph: "-", role: "view only",
+   what: "Which figure the sweep chart plots for each run against the chosen setting; the line joins the median per engine."},
+  // --- 4 · drill-down
+  {id: "focus", name: "Drill-down run", section: "Drill-down", def: "the baseline", range: "any selected run", eph: "-", role: "view only",
+   what: "The run whose cards, per-endpoint chart, worst-10 table and host conditions are shown, and whose ORM work is shaded in the intrusion-over-time chart."},
+  {id: "focusnote", name: "What this run checks (edit)", section: "Drill-down", def: "the run's note", range: "≤ 300 characters", eph: "-", role: "label",
+   what: "Edit the drill-down run's note; Save note (or Enter) stores it, also in a saved run's .meta.json and INDEX.md."},
+  {id: "save", name: "Save to test_results/", section: "Drill-down", def: "-", range: "-", eph: "-", role: "action",
+   what: "Writes the run's CSVs, .meta.json and an INDEX.md entry to the results folder (test_results/ unless OBSERVER_RESULTS_DIR is set). With auto-save on (the default) every finished run is saved by itself and this shows ✔ Saved."},
+  {id: "exp_pk", name: "⬇ Packets CSV", section: "Drill-down", def: "-", range: "-", eph: "-", role: "action", what: "Every packet of the run, both clocks, lag, send lag, late replies."},
+  {id: "exp_ep", name: "⬇ Endpoints CSV", section: "Drill-down", def: "-", range: "-", eph: "-", role: "action", what: "One row per endpoint: RTTs, intrusion, error %, wakeups."},
+  {id: "exp_md", name: "⬇ Report (MD)", section: "Drill-down", def: "-", range: "-", eph: "-", role: "action", what: "A Markdown report of the run: summary, worst endpoints, distribution, idle floor, host conditions."},
+  {id: "chmode", name: "Per-endpoint chart mode", section: "Drill-down", def: "RTT stacked", range: "RTT stacked · Intrusion only", eph: "-", role: "view only",
+   what: "Stacked: kernel RTT plus intrusion per endpoint (their sum is what the monitor reports). Intrusion only: just the waiting time."},
+  // --- page
+  {id: null, name: "Section bar", section: "Page", def: "-", range: "-", eph: "-", role: "view only",
+   what: "The links under the header (1 · Run, 2 · Runs, 3 · Comparison, Charts, 4 · Drill-down) jump to each part of the Lab tab and highlight the part you are in. The Research tab has the same as its contents list (beside the text on wide screens)."},
+  {id: null, name: "▾ / ▸ (fold)", section: "Page", def: "open", range: "open / folded", eph: "-", role: "view only",
+   what: "In a panel heading: folds the panel away or opens it (remembered in this browser). In the run table: shows or hides the runs of one scenario; by default a scenario is open when it has a selected or running run, or 3 runs or fewer."},
+  {id: "theme", name: "Theme", section: "Page", def: "auto", range: "auto (follows the OS) · dark · light", eph: "-", role: "view only",
+   what: "Colour theme. Both themes meet WCAG AA text contrast and use colour-blind-checked run colours; every run also has its own marker shape."},
+];
+const CONCEPT_HELP = [
+  ["Scenario", "Runs with identical endpoints, schedule, semaphore, ORM time, pings, interval, cycles, timeout and target: they asked the same question, of any engine. Only runs in the same scenario compare like for like; the page warns otherwise."],
+  ["few samples", "A percentile needs enough packets to mean anything: about 10 ÷ (1 − q), so p95 needs ~200 packets and p99 ~1000. Below that the value is flagged in the table and left out of the percentile chart."],
+  ["Log scale", "Charts spanning microseconds to tens of milliseconds are easier to read on a logarithmic axis, where each gridline is ten times the previous one."],
+];
+const METRIC_HELP = [
+  ["Kernel RTT", "kernel RTT", "The round trip as the operating system saw it, the lab's reference: from just before the ping is sent until the kernel stamped the reply's arrival (Clock A − send time). Not affected by how late the program reads the reply; it does include the send call itself (a few µs)."],
+  ["Observer RTT", "observer RTT", "The round trip as the monitoring program reports it (Clock B − send time). Equals the kernel RTT plus the observer intrusion."],
+  ["Observer intrusion (observer lag)", "observer intrusion", "How long a reply waited, already arrived, before the program read it (Clock B − Clock A). This is the measurement error caused by the program being busy. Reported as mean, p50, p95, p99 and max."],
+  ["Error vs kernel RTT", "error", "Intrusion as a percentage of the real RTT. PRIMARY: total intrusion ÷ total kernel RTT, the share of all measured time that was error (the per-endpoint table uses the same rule). Secondary: the median of each packet's error (a typical reading) and their mean and max. The mean can be dominated by one packet with a tiny RTT, so it is listed last. Huge on loopback because the real RTT is tiny."],
+  ["Idle floor", "floor", "Even with nothing else to do, every runtime needs some time to notice a reply (waking up, the system call, reading the clock): that is its idle floor, and it differs per language. 'Measure idle floor' runs the same setup with NO ORM work, keeping the same packet rate so the CPU sleeps the same way; 'subtract idle floor' then shows each run's intrusion above that floor, i.e. what the CPU work adds. Raw figures remain the default."],
+  ["Percentiles (p50, p95, p99)", "p95", "The value that 50 / 95 / 99 percent of packets stayed below. p95 = 'the 95th-percentile packet waited no longer than this'. Tails matter: averages hide rare long waits. The percentile chart uses a tail-log axis so p90, p99 and p99.9 are equally spaced."],
+  ["Cycle jitter (RFC 3550)", "jitter", "A smoothed measure of how much successive RTTs of the same endpoint differ: J ← J + (|difference| − J)/16. Shown for the kernel clock (true jitter) and the observer clock (what the monitor reports); a bigger gap means the observer inflates jitter."],
+  ["Reader wakeup", "wakeup", "One occasion when the program's socket reader ran and collected at least one awaited reply. If replies were read as they arrived, wakeups ≈ replies. Far fewer wakeups than replies means replies piled up while the program was busy."],
+  ["Packets per wakeup / Max queue depth", "queue depth", "How many replies were collected in a single wakeup. 1 = the reader was prompt; a big number = that many replies had been waiting in the kernel queue."],
+  ["Scheduler canary", "canary", "A timer that asks to be woken every 10 ms and records how late it really wakes (avg, p95, max). It measures how long the runtime kept other work waiting, independent of network traffic. It only counts while probes are running (not start-up or shutdown). Each runtime's idle floor differs (Rust about 1 ms), so compare increases."],
+  ["ORM offload overhead (IPC + pool wait)", "offload", "Python multi-core only: time the offloaded database work took beyond its own CPU burn, i.e. copying the data to another process, waiting for a free worker, and getting the result back."],
+  ["Packets lost", "lost", "Pings with no reply within 2 s. High loss in a burst usually means the target or network was overloaded by the test itself (the external effect)."],
+  ["Loss by cause", "loss", "Lost pings split by what the kernel saw: no reply at all (real loss); a reply that arrived after the timeout (slow network or target); or a reply the kernel had IN TIME but the program read after its timeout fired (loss caused by the observer itself)."],
+  ["Send lag", "send lag", "How late each ping actually left compared with its schedule. A busy program sends late as well as reads late; this does not change the RTT, but it bends the probing schedule. Each runtime has its own floor (timer resolution), so compare increases."],
+  ["Spread across repeats", "spread", "One dot per repeat for the chosen figure, with a wide dash at the median. Overlapping dots between two columns mean the difference between them is within the run-to-run noise."],
+  ["ORM work shading", "shading", "The shaded bands behind the intrusion-over-time dots are when the run picked in section 4 did its ORM work. Stacks of high-lag dots inside a band are packets that waited behind that work."],
+  ["Error % not meaningful", "tiny RTT", "When the median kernel RTT is under 100 µs (e.g. loopback), even an ordinary wake-up is 100 %+ of the round trip, so error % is shown as 'n/m' and left out of best/worst: judge the lag in µs instead."],
+  ["Warm-up cycle", "warm-up", "With several cycles, cycle 0 is left out of every statistic: endpoints are still starting, so fewer overlap than in steady state. It is kept in the saved files."],
+  ["Host conditions", "host", "Recorded with every run: CPU frequency governor, deep sleep states, turbo, hyper-threading sibling, NIC interrupt cores and coalescing, load average. Warnings explain which ones can move the numbers, so you can compare runs taken under the same conditions."],
+  ["Dashboard stream cost", "stream", "Average time the prober spent writing one progress event for this dashboard. A measure of the instrumentation's own footprint (tens of microseconds)."],
+  ["Charts", "charts", "Key metrics: summary figures per run. Intrusion and kernel RTT percentile curves: the wait, and the network's own round trip, at each percentile (kernel RTT rising with load = external effect). Histogram: share of packets per lag bucket. Over-time dots: stacked dots mean one stall hit many packets. Ranked endpoints: a steep curve means a few endpoints take the damage. Spread: dots per repeat. Canary: worst timer lateness per 0.5 s. Sweep: a figure against one setting. 'Reading the charts' on the Research tab explains each one."],
+];
+const ROW_HELP = {
+  "Kernel RTT, mean": "Real round trip as the kernel saw it (Clock A − send). Not affected by the program's busy-ness.",
+  "Observer RTT, mean": "Round trip as the monitoring program reports it (Clock B − send).",
+  "Cycle jitter, RFC 3550": "Smoothed variation between successive RTTs of one endpoint.",
+  "mean": "Average time replies waited before being read (Clock B − Clock A).",
+  "p95": "95 % of packets waited no longer than this.", "p99": "99 % of packets waited no longer than this.", "p50": "The typical (median) wait.",
+  "max": "The single longest wait.",
+  "error %: total lag ÷ total kernel RTT": "PRIMARY. All intrusion added up, divided by all kernel RTT added up: the share of measured time that was error.",
+  "error %, per packet: median": "The middle packet's intrusion ÷ its kernel RTT: a typical reading.",
+  "error %, per packet: mean": "Average of each packet's intrusion ÷ kernel RTT. One tiny-RTT packet can dominate it.",
+  "error %, per packet: max": "Worst single packet's intrusion ÷ its kernel RTT.",
+  "idle floor run": "The most recent run of this exact setup with no ORM work (Measure idle floor).",
+  "above floor: mean": "Mean intrusion minus the idle floor's: what the CPU work adds.", "above floor: p50": "Median minus the floor's median.",
+  "above floor: p95": "p95 minus the floor's p95.", "above floor: p99": "p99 minus the floor's p99.", "above floor: max": "Max minus the floor's max (noisy).",
+  "Reader wakeups": "Times the socket reader collected awaited replies. Fewer than the replies means batching behind a busy program.",
+  "Packets per wakeup": "Replies collected per reader wakeup (1 = prompt).", "Max queue depth": "Most replies read in one wakeup.",
+  "Canary max lag": "Longest lateness of the 10 ms timer while probing.", "Canary p95 lag": "95th percentile lateness of the 10 ms timer.", "Canary avg lag": "Average lateness of the 10 ms timer.",
+  "Packets lost": "No reply within the timeout.",
+  "Packets measured (n)": "Replied packets with both clocks: the sample size behind every percentile below.",
+  "lost: no reply at all": "Nothing ever came back: real network loss, or the target ignored the ping.",
+  "lost: reply after the timeout": "The kernel received the reply, but after the timeout: a slow network or target.",
+  "lost: reply in time, read too late": "The kernel had the reply in time, but the program read it after its timeout fired: loss caused by the observer.",
+  "send lag, mean": "How late pings left compared with their schedule, on average.", "send lag, p95": "95 % of pings left no later than this.",
+  "send lag, max": "The latest single ping.",
+};
+function renderGlossary() {
+  // Research tab: one table per section of the Lab tab, from CONTROLS.
+  const sections = [...new Set(CONTROLS.map(c => c.section))];
+  $("gloss-controls").innerHTML = sections.map(sec => `<h3>${esc(sec)}</h3><table class="ctltable"><thead><tr><th>Control</th><th>What it does</th>
+      <th>Default</th><th>Range</th><th>Ephemres</th><th>When comparing runs</th></tr></thead><tbody>` +
+    CONTROLS.filter(c => c.section === sec).map(c => `<tr><td><b>${esc(c.name)}</b></td><td>${esc(c.what)}</td><td>${esc(c.def)}</td>
+      <td>${esc(c.range)}</td><td>${esc(c.eph)}</td><td>${esc(c.role)}</td></tr>`).join("") + "</tbody></table>").join("") +
+    "<h3>Terms used above</h3><dl class='gloss'>" + CONCEPT_HELP.map(([n, t]) => `<dt>${esc(n)}</dt><dd>${esc(t)}</dd>`).join("") + "</dl>";
+  $("gloss-metrics").innerHTML = METRIC_HELP.map(([n, , t]) => `<dt>${esc(n)}</dt><dd>${esc(t)}</dd>`).join("");
+  // Lab tab: the same text as a tooltip on each control (on its label when it has one).
+  for (const c of CONTROLS) {
+    const el = c.id && $(c.id); if (!el) continue;
+    const tip = c.what + (c.def !== "-" ? ` Default: ${c.def}.` : "");
+    (el.closest(".engpick") ? el.closest(".field") : el.closest("label") || el).title = tip;
+  }
+}
+
+// ---------------- folding and section navigation ----------------
+// Every Lab panel gets a ▾/▸ button in its heading; the state is remembered in this browser.
+function addFolds() {
+  const folded = store.get("folded", {});
+  for (const sec of document.querySelectorAll("#view-lab > section.panel")) {
+    const h = sec.querySelector(":scope > h2"); if (!h || h.querySelector("button.fold")) continue;
+    const b = document.createElement("button");
+    b.className = "small fold";
+    const set = closed => { sec.classList.toggle("collapsed", closed); b.textContent = closed ? "▸" : "▾";
+      b.setAttribute("aria-expanded", String(!closed)); b.setAttribute("aria-label", (closed ? "show " : "hide ") + h.textContent.trim().split("\n")[0]); };
+    b.onclick = () => { const closed = !sec.classList.contains("collapsed"); set(closed); const f = store.get("folded", {}); f[sec.id] = closed; store.set("folded", f); };
+    h.prepend(b); set(!!folded[sec.id]);
+  }
+}
+// Highlights the link of the section currently at the top of the screen (Lab section bar, Research contents).
+function watchSections(navSel, secSel) {
+  if (!("IntersectionObserver" in window)) return;
+  const links = new Map([...document.querySelectorAll(`${navSel} a`)].map(a => [a.getAttribute("href").slice(1), a]));
+  const seen = new Map();
+  const io = new IntersectionObserver(entries => {
+    for (const e of entries) seen.set(e.target.id, e.isIntersecting ? e.boundingClientRect.top : null);
+    const top = [...seen].filter(([, t]) => t != null).sort((a, b) => a[1] - b[1])[0];
+    links.forEach(a => a.classList.remove("on"));
+    if (top && links.get(top[0])) links.get(top[0]).classList.add("on");
+  }, {rootMargin: "-110px 0px -55% 0px"});
+  document.querySelectorAll(secSel).forEach(sec => sec.id && io.observe(sec));
+}
+// Jump links: open a collapsed target first, then scroll to it (smoothly; the sticky header is accounted for).
+document.addEventListener("click", e => {
+  const a = e.target.closest("nav.secnav a, #doctoc a"); if (!a) return;
+  e.preventDefault();
+  const t = document.querySelector(a.getAttribute("href")); if (!t) return;
+  if (t.classList.contains("collapsed")) { const b = t.querySelector(":scope > h2 button.fold"); if (b) b.click(); }
+  const d = t.querySelector("details"); if (d) d.open = true;
+  t.scrollIntoView({behavior: "smooth", block: "start"});
+});
+
+// ---------------- tabs ----------------
+function showView(name) {
+  const docs = name === "docs";
+  $("view-lab").hidden = docs; $("view-docs").hidden = !docs;
+  $("tab-lab").classList.toggle("on", !docs); $("tab-docs").classList.toggle("on", docs);
+  $("labnav").hidden = docs;                                     // the section bar belongs to the Lab tab
+  try { history.replaceState(null, "", docs ? "#research" : "#"); } catch (e) {}
+  if (!docs) { renderAll(); Object.values(charts).forEach(c => c.resize()); }   // charts drawn while hidden have no size
+  window.scrollTo(0, 0);
+}
+$("tab-lab").onclick = () => showView("lab");
+$("tab-docs").onclick = () => showView("docs");
+// Research tab contents: built from the sections themselves, so it always matches the page's order.
+function buildDocToc() {
+  $("doctoc").innerHTML = "<b>Contents</b>" + [...document.querySelectorAll("#view-docs > section[id]")]
+    .map(sec => `<a href="#${sec.id}">${esc(sec.querySelector("h2").textContent.replace(/\s*\(.*\)\s*$/, "").split(":")[0])}</a>`).join("");
+}
+
+// What the form will run, in words: its length, the warm-up rule, and how it differs from Ephemres.
+// The differences also become the note's suggestion, so each run's purpose is easy to record.
+// The batch-engine boxes: the selected language engine is always part of a batch, so its box is shown ticked
+// and locked; an engine that is not built cannot be ticked.
+let ENGINES_OK = {python: true, go: true, rust: true};
+function refreshEngineBoxes() {
+  for (const e of ["python", "go", "rust"]) {
+    const box = $(`alt_${e}`), selected = e === $("engine").value;
+    if (box.dataset.locked && !selected) { box.checked = false; delete box.dataset.locked; }   // was only locked, not chosen
+    if (selected) { if (!box.checked) box.dataset.locked = "1"; box.checked = true; }
+    box.disabled = selected || ENGINES_OK[e] === false;
+    if (ENGINES_OK[e] === false) box.checked = false;
+    box.closest("label").title = selected ? "selected as the language engine above: always included"
+                               : ENGINES_OK[e] === false ? "not built: run ./build_workers.sh" : "also run this engine in every round";
+  }
+}
+
+// Repeat plan from the form: rounds, the engines alternated in each round (the selected engine plus any
+// ticked ones), and whether each round also measures every engine's idle floor.
+function batchPlan() {
+  const engines = ["python", "go", "rust"].filter(e => e === $("engine").value || ($(`alt_${e}`).checked && !$(`alt_${e}`).disabled));
+  return {repeats: Math.max(1, +$("repeats").value || 1), engines, withFloor: $("withfloor").checked};
+}
+
+function updateFormNote() {
+  const v = {virtual_endpoints: +$("endpoints").value, pings_per_cycle: +$("pings").value, interval_s: +$("interval").value,
+    timeout_s: +$("timeout").value, stagger_window_s: +$("stagger").value, cycles: +$("cycles").value,
+    cycle_length_s: +$("cyclelen").value, db_write_semaphore: +$("semaphore").value, simulated_db_ms: +$("dbms").value};
+  const last = (v.cycles - 1) * v.cycle_length_s + v.stagger_window_s + (v.pings_per_cycle - 1) * v.interval_s + v.timeout_s;
+  const diffs = Object.keys(EPHEMRES).filter(k => Number.isFinite(v[k]) && v[k] !== +EPHEMRES[k])
+    .map(k => `${FIELDS[k][0].toLowerCase()} ${EPHEMRES[k]} → ${v[k]}${FIELDS[k][1]}`);
+  const plan = batchPlan(), nRuns = plan.repeats * plan.engines.length * (plan.withFloor ? 2 : 1);
+  const total = nRuns * (last + 3);                       // + start-up and warm-up per run
+  const batchTxt = nRuns > 1 ? ` As a batch: ${nRuns} runs (${plan.repeats} round${plan.repeats > 1 ? "s" : ""} × ${plan.engines.join(", ")}` +
+    `${plan.withFloor ? ", each with its idle floor" : ""}), about ${(total / 60).toFixed(0)} min in total, engine order rotated every round.` : "";
+  $("formnote").textContent = `Each run takes about ${last >= 90 ? (last / 60).toFixed(1) + " min" : Math.round(last) + " s"}` +
+    (v.cycles > 1 ? `; cycle 0 is a warm-up and is left out of the statistics.` : ".") +
+    (diffs.length ? ` Differs from Ephemres: ${diffs.join(", ")}.` : " Same as Ephemres' configuration.") +
+    ($("hw").checked ? " NIC hardware stamps ON: not comparable with Go/Rust runs." : "") + batchTxt;
+  $("start").textContent = nRuns > 1 ? `▶ Start batch (${nRuns} runs)` : "▶ Start run";
+  $("note").placeholder = diffs.length ? `e.g. what does ${diffs[0]} change?` : "e.g. Ephemres baseline on this target";
+}
+
+// ---------------- actions ----------------
+function wire() {
+  const bind = (id, out, f = v => v) => { const el = $(id), o = $(out); const u = () => o.textContent = f(el.value); el.oninput = u; u(); };
+  bind("endpoints", "v_ep"); bind("stagger", "v_stagger", v => v == 0 ? "0 s (burst)" : v + " s");
+  bind("semaphore", "v_sem"); bind("dbms", "v_db", v => v + " ms");
+  $("preset_burst").onclick = () => { $("stagger").value = 0; $("stagger").oninput(); };
+  $("preset_ephemres").onclick = () => {
+    for (const [key, v] of Object.entries(EPHEMRES)) { const f = FIELDS[key]; if (f && $(f[2])) $(f[2]).value = v; }
+    for (const id of ["endpoints", "stagger", "semaphore", "dbms"]) $(id).oninput();
+    $("hw").checked = false; updateFormNote();
+  };
+  $("engine").onchange = () => {
+    const py = $("engine").value === "python"; $("hw").disabled = !py; if (!py) $("hw").checked = false;
+    refreshEngineBoxes(); updateFormNote();
+  };
+  $("engine").onchange();
+  for (const id of ["endpoints", "stagger", "semaphore", "dbms", "pings", "interval", "timeout", "cycles", "cyclelen", "hw", "cpumode",
+                    "repeats", "alt_python", "alt_go", "alt_rust", "withfloor"])
+    $(id).addEventListener("input", updateFormNote);
+  // No target is built into the page: the last one used in this browser is remembered (browser storage only).
+  $("targets").value = store.get("lastTargets", "");
+  const savedTheme = store.get("theme", "auto");                // apply it before the charts are first drawn
+  $("theme").value = savedTheme;
+  if (savedTheme === "light" || savedTheme === "dark") document.documentElement.dataset.theme = savedTheme;
+  $("theme").onchange = () => applyTheme($("theme").value);
+  $("hlthr").onchange = renderMatrix;
+  $("abovefloor").onchange = renderMatrix;
+  $("combine").onchange = () => {
+    if (!$("combine").checked && columnsFor(sel) > MAX_COLS) { $("combine").checked = true;
+      $("selnote").textContent = `Untick runs first: without combining, ${columnsFor(sel)} runs would need more than ${MAX_COLS} columns.`; return; }
+    setSelection(sel);                                         // re-assign colours: per run or per group
+  };
+  $("spreadmetric").onchange = renderCharts;
+  $("timeall").onchange = renderCharts;
+  updateFormNote();
+  $("floorbtn").onclick = () => startRun("floor");
+  $("start").onclick = () => startRun("test");
+  async function startRun(role) {
+    showProblems([]); $("bar").style.width = "0";
+    const body = {targets: $("targets").value, virtual_endpoints: +$("endpoints").value, pings_per_cycle: +$("pings").value,
+      stagger_window_s: +$("stagger").value, db_write_semaphore: +$("semaphore").value, simulated_db_ms: +$("dbms").value,
+      interval_s: +$("interval").value, timeout_s: +$("timeout").value, cycles: +$("cycles").value, cycle_length_s: +$("cyclelen").value,
+      hw_timestamps: $("hw").checked, note: role === "floor" ? "" : $("note").value, tag: role === "floor" ? "floor" : $("tag").value,
+      engine: $("engine").value, cpu_mode: $("cpumode").value, role};
+    if (role === "floor") body.simulated_db_ms = 0;
+    const local = formProblems(body);
+    const plan = batchPlan();
+    if (role === "test" && plan.engines.some(e => e !== "python") && body.hw_timestamps)
+      local.push({key: "hw_timestamps", msg: "NIC hardware timestamps exist only in the Python engine: untick them to alternate engines"});
+    if (role === "test" && plan.repeats > 1 && !Number.isInteger(plan.repeats)) local.push({key: null, msg: "Repeat must be a whole number"});
+    if (local.length) { showProblems(local); return; }           // nothing is sent
+    const batch = role === "test" && (plan.repeats > 1 || plan.engines.length > 1 || plan.withFloor);
+    const r = batch
+      ? await fetch("/api/batch", {method: "POST", headers: {"Content-Type": "application/json"},
+          body: JSON.stringify({run: body, repeats: plan.repeats, engines: plan.engines, with_floor: plan.withFloor})})
+      : await fetch("/api/run", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body)});
+    if (!r.ok) { const j = await r.json().catch(() => ({})); showProblems(serverProblems(j.detail, r.status)); return; }
+    let run = await r.json();
+    store.set("lastTargets", body.targets.trim());        // offered again next time, in this browser only
+    if (batch) { $("combine").checked = true; run = run.first; if (!run) return; }
+    if (!runById(run.id)) runs.push(run);
+    await setSelection([...sel.filter(x => x !== run.id), run.id].slice(-MAX_SEL));   // watch the new run live
+    focus = run.id; renderAll();
+  }
+  $("stop").onclick = () => fetch("/api/stop", {method: "POST"});
+  $("sweepx").onchange = $("sweepy").onchange = renderCharts;
+$("metricset").onchange = renderCharts; $("logbars").onchange = renderCharts; $("showratio").onchange = renderMatrix;
+  $("focus").onchange = e => { focus = e.target.value; renderFocus(); renderCharts(); };
+  $("chmode").onchange = renderFocus;
+  $("save").onclick = async () => {
+    // The run keeps its own note (edit it in the box above); the form's note belongs to the NEXT run.
+    const r = await fetch(`/api/runs/${encodeURIComponent(focus)}/save`, {method: "POST", headers: {"Content-Type": "application/json"}, body: "{}"});
+    const j = await r.json();
+    $("progtxt").classList.remove("errtxt");
+    $("progtxt").textContent = r.ok ? `saved as ${j.folder}/${j.saved_as}.csv` : "save failed: " + JSON.stringify(j.detail);
+  };
+  $("savenote").onclick = async () => {
+    const r = await fetch(`/api/runs/${encodeURIComponent(focus)}/note`, {method: "POST", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({note: $("focusnote").value})});
+    $("savenote").textContent = r.ok ? "✔ Saved" : "Save failed";
+    setTimeout(() => { $("savenote").textContent = "Save note"; }, 1500);
+  };
+  $("focusnote").onkeydown = e => { if (e.key === "Enter") $("savenote").click(); };
+}
+
+wire(); initCharts(); renderGlossary(); buildDocToc(); addFolds(); renderAll(); connect();
+watchSections("#labnav", "#view-lab > section"); watchSections("#doctoc", "#view-docs > section");
+if (location.hash === "#research") showView("docs");
+</script>
+</body>
+</html>

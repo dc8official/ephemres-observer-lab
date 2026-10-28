@@ -1,0 +1,17 @@
+[package]
+name = "rust_prober"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+description = "Rust (tokio) engine of the Observer-Effect lab; same mechanics and NDJSON protocol as probe_lab.py"
+
+[dependencies]
+# Deliberately minimal: tokio for the async runtime, libc for raw syscalls, serde_json for the NDJSON events.
+tokio = { version = "1", features = ["rt", "rt-multi-thread", "time", "sync", "signal", "macros", "net"] }
+libc = "0.2"
+serde_json = "1"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
