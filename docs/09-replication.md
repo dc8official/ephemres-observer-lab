@@ -63,7 +63,7 @@ Each engine runs in two **CPU core modes**, and the full comparison covers all s
 ## 3. Prepare the prober host (untuned baseline vs. locked replication)
 
 The lab measures tens to hundreds of microseconds, so the host's own power and scheduling state matters.
-- **What we did in the 173 runs in `test_results/`:** all 173 runs were recorded with the host's default laptop power settings (`powersave` CPU governor, `C10` deep sleep enabled, Intel turbo active, and probe pinned to CPU 7), while the dashboard recorded those conditions and warnings into every `.meta.json` (`host` object). Leaving the host untuned revealed substantial time-of-day baseline drift ([10](10-results-analysis.md) §R3.5) and left open whether the single-core `p99` tail (`335–920 µs`) comes from deep C-states or hyper-threading sibling contention.
+- **What I did in the 173 runs in `test_results/`:** all 173 runs were recorded with the host's default laptop power settings (`powersave` CPU governor, `C10` deep sleep enabled, Intel turbo active, and probe pinned to CPU 7), while the dashboard recorded those conditions and warnings into every `.meta.json` (`host` object). Leaving the host untuned revealed substantial time-of-day baseline drift ([10](10-results-analysis.md) §R3.5) and left open whether the single-core `p99` tail (`335-920 µs`) comes from deep C-states or hyper-threading sibling contention.
 - **What you can do for a controlled replication or extended study:** the reversible commands below lock the CPU frequency, disable deep sleep states, and steer interrupts so you can isolate runtime behaviour from host power management. The probe core is the **last** CPU.
 
 | Condition | Why it matters | Set for measuring | Restore afterwards |
@@ -79,7 +79,7 @@ The lab measures tens to hundreds of microseconds, so the host's own power and s
 
 **Check the target first.** `ping -c 20 <target>` should show 0 % loss and a stable RTT. Note the RTT: it is the "true" RTT the kernel clock should agree with.
 
-## 4. The protocol (what we ran vs. recommended 5-round replication)
+## 4. The protocol (what I ran vs. recommended 5-round replication)
 
 > **Note on what was run in this repository:** The 173 runs in `test_results/` were recorded across two sessions using **2 to 3 repeats per batch** (`3` repeats for `sem-sweep`, `burst-sem`, and `burst-mc`; `2` repeats for `ep-sweep`, Session 1 `burst`, and `same-day`), with **Idle floor every round** introduced in the evening follow-up session ([02 Test methodology](02-test-methodology.md) §5, [10 Results analysis](10-results-analysis.md)). The protocol below incorporates the lessons from both sessions (using **5 rounds** and **Idle floor every round** on every batch) for anyone replicating or extending the study.
 
@@ -91,11 +91,11 @@ The lab measures tens to hundreds of microseconds, so the host's own power and s
 4. **Batch settings.**
    - Tick all three **Batch engines**.
    - Set **Repeat (rounds)** to **5** for formal statistical claims (`p = 0.008` on non-overlapping ranges), or **3** for an exploratory sweep like the ones in `test_results/` (see [02](02-test-methodology.md) §3).
-   - Tick **Idle floor every round**, so each test is matched to a floor recorded just before it. Floors from another session are not a fair comparison: the machine's state drifts by more than the effect under a stagger ([10](10-results-analysis.md) §R3.4–§R3.5).
+   - Tick **Idle floor every round**, so each test is matched to a floor recorded just before it. Floors from another session are not a fair comparison: the machine's state drifts by more than the effect under a stagger ([10](10-results-analysis.md) §R3.4 and §R3.5).
 5. **Labels.**
    - Write the question in **What is this run checking?**, e.g. *"Ephemres defaults, single core: which engine keeps intrusion lowest?"*.
    - Give the series a **Series tag**, such as `engines-sc`.
-   - Keep notes short (about 25–40 characters); the run table shows only the start of a note.
+   - Keep notes short (about 25 to 40 characters); the run table shows only the start of a note.
 6. **Run.** Press **Start batch** and leave the machine alone until it finishes.
    - With the Ephemres defaults one run takes about 3.6 minutes.
    - At 3 rounds × 3 engines × (test + floor) = 18 runs ≈ 1 h 05 min; at 5 rounds = 30 runs ≈ 1 h 50 min.

@@ -54,7 +54,7 @@ A red banner appears when the start-up check found something left over from an e
 
 **Fields.**
 - **Where and with what:** targets (comma-separated IPv4 addresses); **Language engine** (Python / Go / Rust; an engine that is not built is greyed out); **CPU core mode** (Single-Core pinned / Multi-Core).
-- **Load:** virtual endpoints (1–500), stagger window (0 = burst), `db_write_semaphore` (1–100), simulated DB work (0–15 ms).
+- **Load:** virtual endpoints (1 to 500), stagger window (0 = burst), `db_write_semaphore` (1 to 100), simulated DB work (0 to 15 ms).
 - **Pings:** pings per cycle, ping interval (up to 30 s), reply timeout, cycles per endpoint, cycle length.
 - **NIC hardware timestamps:** Python only, and off by default because it breaks engine parity.
 - **Labels:** an optional **series tag**, which goes into the file name, and **what the run is checking** (the note).
@@ -110,7 +110,7 @@ A red banner appears when the start-up check found something left over from an e
 - **Multiples:** each non-baseline cell can also show its value as a multiple of the baseline (toggle).
 
 **Best and worst marks.** For rows where lower is better, **▼ marks the best and ▲ the worst** value. They are also green and red, but colour is never used alone. They appear only when:
-- best and worst differ by at least the chosen threshold (10 % by default; 5–50 % or never), because smaller gaps between single runs are usually noise;
+- best and worst differ by at least the chosen threshold (10 % by default; 5 to 50 % or never), because smaller gaps between single runs are usually noise;
 - with repeats, the best column's highest repeat is below the worst column's lowest.
 
 Idle-floor columns and the above-floor rows never get ▼/▲.
@@ -219,12 +219,12 @@ Run ids are `run1`, `run2`, … for runs made in this session, and `disk-<file n
 Every field is optional except `targets`. Omitted fields take the Ephemres defaults, which `/api/state` also returns as `defaults`.
 
 **Limits:**
-- endpoints 1–500, pings 1–20, interval 0.05–30 s, timeout 0.1–10 s, stagger 0–600 s;
-- cycles 1–60; cycle length 1–600 s, and at least (pings − 1) × interval + timeout when cycles > 1;
-- semaphore 1–100, ORM 0–15 ms;
+- endpoints 1 to 500, pings 1 to 20, interval 0.05 to 30 s, timeout 0.1 to 10 s, stagger 0 to 600 s;
+- cycles 1 to 60; cycle length 1 to 600 s, and at least (pings − 1) × interval + timeout when cycles > 1;
+- semaphore 1 to 100, ORM 0 to 15 ms;
 - `hw_timestamps` only with `engine: "python"`;
 - `role` is `test` or `floor` (a floor run forces 0 ms ORM);
-- tag ≤ 24 characters, note ≤ 300, 1–32 targets.
+- tag ≤ 24 characters, note ≤ 300, 1 to 32 targets.
 
 ## WebSocket messages (server → browser)
 

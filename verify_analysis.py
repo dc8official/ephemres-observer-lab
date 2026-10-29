@@ -682,7 +682,7 @@ def cell(vals: List[float]) -> str:
     unit = "ms" if ms else "µs"
     if len(vals) == 1:
         return f"{fmt_dur(med, ms)} {unit}"
-    return f"{fmt_dur(med, ms)} {unit} ({fmt_dur(min(vals), ms)}–{fmt_dur(max(vals), ms)})"
+    return f"{fmt_dur(med, ms)} {unit} ({fmt_dur(min(vals), ms)} to {fmt_dur(max(vals), ms)})"
 
 
 def select(runs: Dict[str, Dict[str, Any]], **want: Any) -> List[Dict[str, Any]]:
@@ -730,8 +730,8 @@ def session2_tables(session2: Dict[str, Dict[str, Any]], cut: Dict[str, Dict[str
     T["3.4"] = rows
 
     # Python burst runs through the day, grouped by when they ran
-    periods = [("10:35–10:50", "20261025-1000", "20261025-1200"), ("14:33–14:50", "20261025-1400", "20261025-1500"),
-               ("18:56–18:59", "20261025-1850", "20261025-1905"), ("19:11–21:04", "20261025-1910", "20261025-2200")]
+    periods = [("10:35 to 10:50", "20261025-1000", "20261025-1200"), ("14:33 to 14:50", "20261025-1400", "20261025-1500"),
+               ("18:56 to 18:59", "20261025-1850", "20261025-1905"), ("19:11 to 21:04", "20261025-1910", "20261025-2200")]
     every = {**first, **cut, **session2}
     rows = []
     for label, lo, hi in periods:

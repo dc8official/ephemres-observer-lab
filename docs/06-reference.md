@@ -99,7 +99,7 @@ The identifier space (`--id-base` + endpoints + warm-up ids) must fit in 16 bits
 
 ## `verify_analysis.py`
 
-`python3 verify_analysis.py [--print-tables]` checks every figure quoted in [10 Results analysis](10-results-analysis.md) against the saved runs and exits 1 on any mismatch. `--print-tables` prints the rows of Tables 3.1–3.5 as they should appear in the report. No root is needed.
+`python3 verify_analysis.py [--print-tables]` checks every figure quoted in [10 Results analysis](10-results-analysis.md) against the saved runs and exits 1 on any mismatch. `--print-tables` prints the rows of Tables 3.1 to 3.5 as they should appear in the report. No root is needed.
 
 ## Environment variables
 
@@ -115,7 +115,7 @@ The identifier space (`--id-base` + endpoints + warm-up ids) must fit in 16 bits
 |---|---|
 | ICMP identifiers | `0x1000 + endpoint index`; warm-up pings use the identifiers after the last endpoint |
 | ICMP payload | 56 bytes |
-| Reply timeout | 2 s (dashboard: 0.1–10 s) |
+| Reply timeout | 2 s (dashboard: 0.1 to 10 s) |
 | Dashboard defaults | Ephemres: 100 endpoints, 5 pings 8 s apart, stagger 60 s, 3 cycles × 60 s, semaphore 15, 3 ms ORM |
 | Receive queue | 8 MiB requested (force-set when root); the run note shows the size granted |
 | Canary tick | 10 ms; window kept: 120 000 ticks (20 minutes) |

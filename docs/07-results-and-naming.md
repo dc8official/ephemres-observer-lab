@@ -22,7 +22,7 @@ Everything saved lives in `test_results/` (or `$OBSERVER_RESULTS_DIR`). The term
 **Notes: what each run was checking.** Give every run a one-sentence note: the form's "What is this run checking?", or `--note` on the command line.
 - **Where it shows:** the run table, the comparison header and every export.
 - **Changing it later:** it can be changed after the run, saved or not (drill-down → Save note). For a saved run, the change is written to its `.meta.json` and to the Description line of its `INDEX.md` entry.
-- **Keep it short:** the run table's column is narrow, so a note of about 25–40 characters stays readable, e.g. "Burst sem 5 · Rust single-core".
+- **Keep it short:** the run table's column is narrow, so a note of about 25 to 40 characters stays readable, e.g. "Burst sem 5 · Rust single-core".
 
 **Loading.** At start-up the dashboard loads every per-packet CSV in the folder, so saved runs can be compared in later sessions. Runs with no `.meta.json` get their settings from the readable part of their file name.
 
@@ -129,6 +129,6 @@ One row per metric, one column per run. The Markdown version also shows each val
 ## Recorded corpora and analysis
 
 All 173 benchmark runs in `test_results/` are indexed in `test_results/INDEX.md` and analysed in full in [10 Empirical Results and Comparative Analysis](10-results-analysis.md):
-- **First corpus (90 runs, 2026-10-24 to 2026-10-25 daytime):** staggered and burst idle floors (`floor`), semaphore sweeps at 5, 30 and 50 (`sem-sweep`), endpoint scaling at 25, 100 and 250 endpoints (`ep-sweep`), and single-core burst runs (`burst`) ([10](10-results-analysis.md) §R1–§R2).
+- **First corpus (90 runs, 2026-10-24 to 2026-10-25 daytime):** staggered and burst idle floors (`floor`), semaphore sweeps at 5, 30 and 50 (`sem-sweep`), endpoint scaling at 25, 100 and 250 endpoints (`ep-sweep`), and single-core burst runs (`burst`) ([10](10-results-analysis.md) §R1 and §R2).
 - **Follow-up session (81 runs, 2026-10-25 evening):** single-core burst semaphore sweeps (`burst-sem`), multi-core burst runs (`burst-mc`), and staggered runs at 25, 100 and 250 endpoints (`ep-sweep`, `same-day`) paired with interleaved idle floors (`floor`) ([10](10-results-analysis.md) §R3).
 - **Runtime scheduler observations** (Go single-thread timer starvation, tokio 1 ms timer resolution, Rust burst stall bounds, and Python process-pool offload overhead) are documented in [04 Engines](04-engines.md) and [10 Results analysis](10-results-analysis.md#architectural-anomalies--host-effects).

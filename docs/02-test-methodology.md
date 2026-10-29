@@ -1,6 +1,6 @@
 # 02 Test methodology
 
-This document defines what is measured, how it is measured, and how to read the results. Every number the dashboard or a CSV file shows is defined here. Terms are also defined in the [glossary](../README.md#glossary).
+This page sets out what the lab measures, how it measures it, and how to read the results. Every number the dashboard or a CSV file shows is defined here. Terms are also defined in the [glossary](../README.md#glossary).
 
 ## 1. The measurement model
 
@@ -59,7 +59,7 @@ A reply that turns up *after* its ping timed out is not thrown away. Every engin
 A busy program also *sends* late. The coroutine, goroutine or task that should send ping *n* at its scheduled moment wakes up late.
 - **What is recorded:** every engine records, per packet, **send lag = actual send time − scheduled send time**, on the monotonic clock.
 - **Effect:** it does not change the RTT, because `tx` is read at the real send. It does bend the probing schedule.
-- **Floors differ per engine.** As with the canary, each runtime has its own floor set by its timer resolution. On the development laptop this is roughly 0.3–0.7 ms for Go, 0.7 ms for Python and 1–1.6 ms for Rust. Compare *increases*, not absolute levels.
+- **Floors differ per engine.** As with the canary, each runtime has its own floor set by its timer resolution. On the development laptop this is roughly 0.3 to 0.7 ms for Go, 0.7 ms for Python and 1 to 1.6 ms for Rust. Compare *increases*, not absolute levels.
 
 ### Hardware timestamps (opt-in, Python only)
 
@@ -87,7 +87,7 @@ The dashboard starts from the configuration of the system being modelled. An unt
 | virtual endpoints | 100 | the scale at which the problem was first seen |
 | pings per cycle, interval | 5 pings, 8 s apart | Ephemres |
 | reply timeout | 2 s | lab default |
-| stagger window, cycle length | 60 s, 60 s | Ephemres: each endpoint starts at a second 0–59 of a 60 s slot |
+| stagger window, cycle length | 60 s, 60 s | Ephemres: each endpoint starts at a second 0 to 59 of a 60 s slot |
 | cycles | 3 | Ephemres runs continuously; 3 gives two steady-state cycles after the warm-up |
 | `db_write_semaphore` | 15 | Ephemres production default (raised from 4, expected to improve ICMP measurement accuracy; swept at 5, 15, 30, 50, with no measurable effect under a 60 s stagger: [10](10-results-analysis.md) §R2.1) |
 | simulated ORM work | 3 ms | the lab's estimate of Ephemres' post-cycle CPU work |
@@ -119,7 +119,7 @@ Endpoint *i* of *N* starts cycle *c* at `c × cycle_length + stagger_window × i
 | Mode | Python | Go | Rust | Rationale |
 |---|---|---|---|---|
 | **single_core** | process pinned to one core; the ORM spin runs inline on the event loop | `GOMAXPROCS=1`, pinned to one core | single-threaded tokio runtime, pinned to one core | Models resource-constrained 1-vCPU hosts and GNS3 network simulation environments where Ephemres was first built |
-| **multi_core** | the event loop stays on its core; the ORM spin runs in a process pool (`ProcessPoolExecutor`), and its data is pickled across the process boundary | `GOMAXPROCS` = all cores | multi-threaded (work-stealing) tokio runtime | Models modern multi-core server hardware to assess whether scaling cores eliminates event-loop starvation |
+| **multi_core** | the event loop stays on its core; the ORM spin runs in a process pool (`ProcessPoolExecutor`), and its data is pickled across the process boundary | `GOMAXPROCS` = all cores | multi-threaded (work-stealing) tokio runtime | Models modern multi-core server hardware, to test whether more cores remove event-loop starvation |
 
 **Python multi-core deliberately pays the real price of offloading.**
 - **The payload is serialised on the main process's side.** The ORM-style payload is a dict holding five packet dicts, strings and tags. It is serialised on helper threads in the main process. Those threads compete with the event loop for Python's interpreter lock (the GIL).
@@ -128,7 +128,7 @@ Endpoint *i* of *N* starts cycle *c* at `c × cycle_length + stagger_window × i
 
 **How Python multi-core is monitored.** Everything measured in the other modes is measured here too: both clocks on every packet, the canary, send lag and loss by cause.
 - **What is added:** the **ORM offload overhead**, reported per cycle and per run. The ORM-work shading marks the offloaded jobs.
-- **What this tests:** whether moving the 3 ms CPU spin off the main thread eliminates both event-loop starvation (measured by the canary) and packet-reading intrusion (measured by `Clock B − Clock A`), or whether the remaining socket I/O and IPC serialisation costs keep intrusion bounded by the event loop itself (evaluated in [10 Results analysis](10-results-analysis.md) §R1.3, §R3.3).
+- **What this tests:** whether moving the 3 ms CPU spin off the main thread removes both event-loop starvation (measured by the canary) and packet-reading intrusion (measured by `Clock B − Clock A`), or whether the remaining socket I/O and IPC serialisation costs keep intrusion bounded by the event loop itself (evaluated in [10 Results analysis](10-results-analysis.md) §R1.3, §R3.3).
 
 ## 3. Metrics and analysis choices
 
@@ -136,10 +136,10 @@ All statistics are computed once on the server (`server/analysis.py` and `server
 
 | Metric | Scope | Definition and Why It Matters |
 |---|---|---|
-| **Run-level `mean`, `p50` (median), `p95`, `p99`, `max`** | All steady-state replied packets of a run | Summary statistics of **observer lag** (`Clock B − Clock A`) across the run's measured packets (`cycle >= 1`). Reporting both `p50` (median) and `p95`/`p99`/`mean` is essential because under burst load, Go and Rust read the first four pings of each cycle near the idle floor (`p50 ≈ 30–80 µs`) while stalling on the final ping for tens of milliseconds, pulling the `mean` and `p95` up by 40×. |
+| **Run-level `mean`, `p50` (median), `p95`, `p99`, `max`** | All steady-state replied packets of a run | Summary statistics of **observer lag** (`Clock B − Clock A`) across the run's measured packets (`cycle >= 1`). Reporting both `p50` (median) and `p95`/`p99`/`mean` is essential because under burst load, Go and Rust read the first four pings of each cycle near the idle floor (`p50 ≈ 30 to 80 µs`) while stalling on the final ping for tens of milliseconds, pulling the `mean` and `p95` up by 40×. |
 | **Cycle-level `min`, `max`, `avg`, `p95`, `std dev`** | The replied packets of one endpoint cycle (`5` pings by default) | Recorded in `<name>_cycles.csv` separately for `kernel_rtt_us`, `user_rtt_us`, and `observer_lag_us`. Standard deviation uses the population formula `sqrt((1/k) × sum((x_i − mean)^2))`. |
-| **Pings 1–4 vs. Ping 5 (`icmp_seq % pings == pings - 1`)** | Early pings vs. final ping of each cycle | In a 5-ping cycle, **Pings 1–4** arrive while endpoints are still probing (no post-cycle database work triggered). **Ping 5** (`icmp_seq % 5 == 4`) is the final ping whose reply releases the endpoint into the `db_write_semaphore` and 3 ms ORM spin. Comparing Pings 1–4 against Ping 5 isolates whether stalls are caused by post-cycle ORM serialisation or by send/receive loop batching. |
-| **RFC 3550 jitter** | Per endpoint cycle, then averaged across cycles | Smoothed inter-arrival transit-time variation defined by RFC 3550 §6.4.1: for consecutive replied packets `i − 1` and `i` in sequence order within the same cycle, `D(i − 1, i) = RTT_i − RTT_{i − 1}` and `J_i = J_{i − 1} + (|D(i − 1, i)| − J_{i − 1}) / 16`. Computed independently on **Kernel RTTs** (true network jitter) and **Observer RTTs** (reported jitter). The gap `Observer Jitter − Kernel Jitter` is artificial jitter invented by the monitor's runtime scheduling. |
+| **Pings 1 to 4 vs. Ping 5 (`icmp_seq % pings == pings - 1`)** | Early pings vs. final ping of each cycle | In a 5-ping cycle, **Pings 1 to 4** arrive while endpoints are still probing (no post-cycle database work triggered). **Ping 5** (`icmp_seq % 5 == 4`) is the final ping whose reply releases the endpoint into the `db_write_semaphore` and 3 ms ORM spin. Comparing Pings 1 to 4 against Ping 5 isolates whether stalls are caused by post-cycle ORM serialisation or by send/receive loop batching. |
+| **RFC 3550 jitter** | Per endpoint cycle, then averaged across cycles | Smoothed inter-arrival transit-time variation defined by RFC 3550 §6.4.1: for consecutive replied packets `i − 1` and `i` in sequence order within the same cycle, `D(i − 1, i) = RTT_i − RTT_{i − 1}` and `J_i = J_{i − 1} + (|D(i − 1, i)| − J_{i − 1}) / 16`. Computed independently on **Kernel RTTs** (true network jitter) and **Observer RTTs** (reported jitter). The gap `Observer Jitter − Kernel Jitter` is jitter that the monitor's own scheduling adds. |
 | **Error % (primary)** | Run, endpoint, or cycle | `100 × sum(observer_lag) ÷ sum(kernel_rtt)` across all measured packets in the scope. Answers *"what percentage of the total wire time measured was added by the observer?"* and prevents a single packet with a tiny denominator from dominating the result. |
 | **Error % (secondary)** | Per packet, summarised by median, mean, and max | For each packet `i` with `kernel_rtt_i > 0`, `e_i = 100 × observer_lag_i ÷ kernel_rtt_i`. The median `e_i` shows a typical packet's relative error; the arithmetic mean is sensitive to single low-RTT outliers (see worked example below). |
 | **Intrusion above idle floor (`Δ`)** | Run vs. matching floor run | A loaded run's intrusion statistic (`mean`, `p50`, `p95`, `p99`) minus the same statistic from the matching idle-floor run (`simulated_db_ms = 0.0`, identical engine, CPU mode, schedule, and target), isolating the delay added specifically by the post-cycle ORM work. |
@@ -148,24 +148,24 @@ All statistics are computed once on the server (`server/analysis.py` and `server
 | **Send lag (`send_lag_us`)** | Per packet (`mean`, `p95`, `max` over measured cycles) | `actual send time − scheduled slot time` measured on the runtime's monotonic clock immediately before `sendto()`. Quantifies the send-side observer effect (how late a busy scheduler dispatches outbound probes). |
 | **Loss by cause** | Run counters (`no_reply`, `after_timeout`, `read_late`) | Classifies every timed-out ping using late-reply tracking (§1): **no reply** (true packet loss), **reply after the timeout** (`Clock A − tx > timeout`, slow network/target), or **reply in time, read too late** (`Clock A − tx <= timeout`, false timeout caused by the observer's event loop). |
 | **ORM offload overhead (`ipc_ms`)** | Per cycle (`mean` and `max` per run, Python `multi_core` only) | Total wall-clock duration of `loop.run_in_executor()` minus the worker's `simulated_db_ms` CPU spin. Captures `pickle` serialisation/deserialisation on main-process helper threads, IPC pipe transfer, and worker-pool queueing when `db_write_semaphore` exceeds the worker count (`CPUs − 1`). |
-| **Dashboard stream cost (`emit_us`)** | Run summary | Mean time spent serialising and writing each NDJSON `cycle` event to `stdout` (`emit_us_total / emit_n`), verifying that telemetry emission itself takes only tens of microseconds. |
+| **Dashboard stream cost (`emit_us`)** | Run summary | Mean time spent serialising and writing each NDJSON `cycle` event to `stdout` (`emit_us_total / emit_n`), which shows how much the telemetry itself costs (typically tens of microseconds). |
 | **Sample size `n` and percentile gate** | Run replied packet count | The number of steady-state packets with both Clock A and Clock B. A percentile `q` is plotted and unmarked only when `n >= 10 ÷ (1 − q)` (at least 10 packets in the tail above `q`: `n >= 200` for `p95`, `n >= 1,000` for `p99`), and is flagged **few samples** otherwise. |
-| **▼ best / ▲ worst** | Comparison table row | Marked on lower-is-better rows only when the best and worst columns differ by at least the chosen threshold (`10%` by default) and, when combining repeats, their min–max repeat ranges do not overlap. |
-| **Intrusion histogram** | Run distribution | Share of measured packets falling into 12 logarithmic lag buckets: `<50 µs`, `50–100 µs`, `100–150 µs`, `150–250 µs`, `250–500 µs`, `0.5–1 ms`, `1–2 ms`, `2–5 ms`, `5–10 ms`, `10–25 ms`, `25–50 ms`, and `>50 ms`. |
+| **▼ best / ▲ worst** | Comparison table row | Marked on lower-is-better rows only when the best and worst columns differ by at least the chosen threshold (`10%` by default) and, when combining repeats, their min-to-max repeat ranges do not overlap. |
+| **Intrusion histogram** | Run distribution | Share of measured packets falling into 12 logarithmic lag buckets: `<50 µs`, `50-100 µs`, `100-150 µs`, `150-250 µs`, `250-500 µs`, `0.5-1 ms`, `1-2 ms`, `2-5 ms`, `5-10 ms`, `10-25 ms`, `25-50 ms`, and `>50 ms`. |
 
 ### The scheduler canary
 
 Each engine runs a small task that asks to sleep 10 ms and measures how late it really wakes: `lag = elapsed − 10 ms`. This is the runtime's own measure of how long other work was kept waiting, independent of any network traffic. It is reported as average, p95 and max.
 
 * **Gate.** The canary is already running during start-up, but it records only ticks that *begin* after start-up has finished (socket set-up, warm-up ping, process-pool start). It stops recording before shutdown and summary work begins. So start-up and teardown work never count as probing-time lag. (The two oldest runs in `test_results/` predate this gate; see [07](07-results-and-naming.md).)
-* **The floor differs per runtime.** An idle canary reads about 0.1–0.4 ms in Python, because its selector rounds timeouts up to whole milliseconds. It reads 0.1–0.4 ms in Go, and about 1 ms in Rust, because tokio's timers have 1 ms resolution. Compare canary *increases* between engines, not absolute levels.
+* **The floor differs per runtime.** An idle canary reads about 0.1 to 0.4 ms in Python, because its selector rounds timeouts up to whole milliseconds. It reads 0.1 to 0.4 ms in Go, and about 1 ms in Rust, because tokio's timers have 1 ms resolution. Compare canary *increases* between engines, not absolute levels.
 * **Per-cycle window.** Each cycle also reports the canary over the interval its pings were in flight.
 
 ### Error %: which one, and why
 
 Per packet, error = observer lag ÷ kernel RTT. There are three ways to summarise a set of packets. The lab reports them in this order of importance:
 
-1. **Total lag ÷ total kernel RTT (primary).** Add up all the lag, add up all the RTT, and divide. It answers "what share of all the time we measured was error?", and no single packet can dominate it.
+1. **Total lag ÷ total kernel RTT (primary).** Add up all the lag, add up all the RTT, and divide. It answers "what share of all the measured time was error?", and no single packet can dominate it.
 2. **Median of the per-packet errors.** The middle packet's error: "how wrong is a typical reading?".
 3. **Mean of the per-packet errors, and the max.** The mean is easily dominated by one packet whose RTT happens to be tiny.
 
@@ -188,19 +188,19 @@ The same rule (total ÷ total) is used everywhere a single error figure is shown
 
 ### Statistical replication and non-parametric significance
 
-The **Repeat** setting runs one setup several times as a *batch*, rotating the engine order every round (`Python → Go → Rust`, then `Go → Rust → Python`, then `Rust → Python → Go`) so that slow host drift is spread across all engines. With **combine repeats** on, the dashboard reports the **median** across repeats and the **min–max range**, and only marks **▼ best / ▲ worst** when the repeat ranges do not overlap.
+The **Repeat** setting runs one setup several times as a *batch*, rotating the engine order every round (`Python → Go → Rust`, then `Go → Rust → Python`, then `Rust → Python → Go`) so that slow host drift is spread across all engines. With **combine repeats** on, the dashboard reports the **median** across repeats and the **min-to-max range**, and only marks **▼ best / ▲ worst** when the repeat ranges do not overlap.
 
 - **Unit of replication:** The unit of replication is the **run**, not the individual packet (packets within one run share the same ORM bursts and schedule collisions).
 - **Exact Mann-Whitney rank test on non-overlapping ranges:** If every repeat of configuration A is below every repeat of configuration B (complete non-overlap), the exact two-sided Mann-Whitney rank-test p-value for `k` repeats per configuration is `2 ÷ C(2k, k)`:
 
-| Repeats per column (`k`) | Exact `p` on complete non-overlap | Methodological interpretation |
+| Repeats per column (`k`) | Exact `p` on complete non-overlap | How to read it |
 |---|---|---|
 | `2` | `0.33` | Exploratory check; non-overlap alone is weak evidence and can reflect run-to-run host drift |
-| `3` | `0.10` | Exploratory sweep; clearly separates large regime differences (e.g., tens of microseconds vs. tens of milliseconds), but cannot prove small microsecond gaps at the 5 % level |
+| `3` | `0.10` | Exploratory sweep; clearly separates large regime differences (for example tens of microseconds against tens of milliseconds), but cannot prove small microsecond gaps at the 5 % level |
 | `5` (recommended for formal replication) | `0.008` | **Minimum for a formal statistical claim** at the `p < 0.01` level |
 | `7` | `0.0006` | High-power replication when testing small microsecond differences |
 
-The recorded benchmark corpus in `test_results/` (catalogued in [07 Results and naming](07-results-and-naming.md) and analysed in [10 Empirical Results and Comparative Analysis](10-results-analysis.md)) uses 2 to 3 repeats per sweep, reports the median and full min–max range across repeats, and requires non-overlapping ranges before calling any difference real.
+The recorded benchmark corpus in `test_results/` (catalogued in [07 Results and naming](07-results-and-naming.md) and analysed in [10 Empirical Results and Comparative Analysis](10-results-analysis.md)) uses 2 or 3 repeats per sweep and reports the median and full min-to-max range across repeats. A difference counts only when the ranges don't overlap, and even then it's exploratory, because 5 repeats is the minimum for a formal claim.
 
 ### Error % is not meaningful for tiny round trips
 
@@ -240,13 +240,13 @@ To evaluate the research questions in [01 Project scope](01-project-scope.md), t
 
 1. **Host telemetry and baseline capture.**
    - Before every run, `server/hostinfo.py` records the CPU model, core/thread topology, kernel version, clocksource (`TSC`), CPU frequency governor (`powersave` vs. `performance`), deepest enabled CPU idle state (`C-states`), NIC interrupt (`IRQ`) core affinity, and 1-minute load average into the run's `.meta.json`.
-   - When the host is run in its default untuned operating state, these recorded telemetry fields allow the analysis to check whether anomalies stem from power management or interrupt placement rather than the language runtime.
+   - When the host is run in its default untuned operating state, these fields let the analysis check whether an anomaly comes from power management or interrupt placement rather than from the language runtime.
 2. **Staggered vs. burst schedule sweeps.**
    - **Staggered (`stagger_window = 60 s`):** Models Ephemres's steady-state operating profile (`1.67` endpoints/s starting and finishing), swept across `db_write_semaphore` values (`5, 15, 30, 50`) and endpoint scales (`25, 100, 250`) across all six engine × CPU-mode combinations.
    - **Synchronised burst (`stagger_window = 0 s`):** Models worst-case simultaneous startup (`100` endpoints firing and completing their 5th ping simultaneously), swept across semaphore values (`5, 15, 50`) and single-core vs. multi-core modes.
-3. **Separating Pings 1–4 from Ping 5 in burst analysis.**
-   - In a 5-ping cycle under burst load, **Pings 1–4** arrive while all endpoints are still mid-cycle (`0` ORM spins running), whereas **Ping 5** (`icmp_seq % 5 == 4`) triggers the post-cycle semaphore acquisition and `3.0 ms` ORM spin across all endpoints simultaneously.
-   - Because run-level `mean` and `p95` mix these two distinct phases together, burst runs must be decomposed into **Pings 1–4 Median** (pure send/receive burst overhead) and **Ping 5 Median** (post-cycle ORM serialisation stall).
+3. **Separating Pings 1 to 4 from Ping 5 in burst analysis.**
+   - In a 5-ping cycle under burst load, **Pings 1 to 4** arrive while all endpoints are still mid-cycle (`0` ORM spins running), whereas **Ping 5** (`icmp_seq % 5 == 4`) triggers the post-cycle semaphore acquisition and `3.0 ms` ORM spin across all endpoints simultaneously.
+   - Because run-level `mean` and `p95` mix these two distinct phases together, burst runs have to be split into **Pings 1 to 4 Median** (pure send/receive burst overhead) and **Ping 5 Median** (post-cycle ORM serialisation stall).
 4. **Same-session interleaved idle floors.**
    - Every batch configuration should be paired with an interleaved idle floor (`simulated_db_ms = 0.0`, recorded immediately before the loaded run via `Idle floor every round`) in rotating engine order (`Py → Go → Rs`, `Go → Rs → Py`, `Rs → Py → Go`) to prevent time-of-day thermal or power-state drift from biasing floor subtraction.
 
@@ -263,7 +263,7 @@ The step-by-step guide in [09 Replication guide](09-replication.md) documents bo
 3. **5-round batches with interleaved floors on every sweep.**
    - Running `5` repeats per configuration (`p = 0.008` on non-overlap) with **idle floor every round** enabled across all endpoint and semaphore sweeps.
 4. **Isolating Python multi-core pure IPC overhead under burst (`db_write_semaphore ≤ CPUs − 1`).**
-   - Running `py-mc` under burst with `db_write_semaphore` at or below the worker count (`CPUs − 1`, e.g., `7` on an 8-CPU host) vs. `15` to separate `pickle`/pipe serialisation time from worker-pool queue wait when all 100 endpoints finish together.
+   - Running `py-mc` under burst with `db_write_semaphore` at or below the worker count (`CPUs − 1`, for example `7` on an 8-CPU host) vs. `15` to separate `pickle`/pipe serialisation time from worker-pool queue wait when all 100 endpoints finish together.
 5. **Kernel transmit timestamps (`SOF_TIMESTAMPING_TX_SOFTWARE`).**
    - Capturing the transmit timestamp in the kernel rather than reading `tx` in user space before `sendto()`, removing the host send-path component from `kernel_rtt_us` under burst load.
 
@@ -271,7 +271,7 @@ The step-by-step guide in [09 Replication guide](09-replication.md) documents bo
 
 **What a result means.** Compare *observer lag* (intrusion) and its percentiles between runs:
 - **Under a staggered schedule**, compare the **median (`p50`)**, **`p95`**, and **`p99`** against an **interleaved idle floor** recorded in the same session to determine whether post-cycle ORM work adds measurable delay above each runtime's baseline socket-read floor.
-- **Under a burst schedule**, do **not** rely on the run-level `mean`, `p95`, or `Primary Error %` alone. Because early pings in a cycle arrive while no ORM work is running and only the final ping triggers the post-cycle ORM write, split the burst reading into **Pings 1–4 Median** and **Ping 5 Median** ([10](10-results-analysis.md) Table 2.4, Tables 3.1–3.3).
+- **Under a burst schedule**, do **not** rely on the run-level `mean`, `p95`, or `Primary Error %` alone. Because early pings in a cycle arrive while no ORM work is running and only the final ping triggers the post-cycle ORM write, split the burst reading into **Pings 1 to 4 Median** and **Ping 5 Median** ([10](10-results-analysis.md) Table 2.4, Tables 3.1 to 3.3).
 - **Kernel RTT** is the reference. If it shifts between staggered and burst runs (even when `simulated_db_ms = 0 ms`), that shift comes from the send pattern and local/target queueing, not from the ORM spin.
 
 ### A reading order
@@ -281,7 +281,7 @@ The step-by-step guide in [09 Replication guide](09-replication.md) documents bo
    - Check `n`: at least `200` replied packets for `p95`, `1,000` for `p99` (25-endpoint runs have `250` packets, so their `p99` is flagged `few samples` and not used for findings).
    - Check loss by cause (`no_reply`, `after_timeout`, `read_late`).
 2. **Check the median (`p50`) and tail (`p95`, `p99`), plus Ping 5 in burst runs.**
-   - Compare medians and min–max repeat ranges across repeats. Treat overlapping repeat ranges as no difference shown.
+   - Compare medians and min-to-max repeat ranges across repeats. Treat overlapping repeat ranges as no difference shown.
 3. **Compare against the same-session idle floor.**
    - Subtract or compare against the floor recorded just before the test to see whether post-cycle ORM work added anything above the runtime's baseline read path.
 4. **Separate internal vs. external effects.**
@@ -298,7 +298,7 @@ Full reference tables for every comparison-table row group, best/worst (▼/▲)
 | Question ([01](01-project-scope.md)) | Evidence used in [10 Results analysis](10-results-analysis.md) |
 |---|---|
 | 1. Size of the distortion, Python single-core | Staggered `py-sc` at Ephemres defaults (`100` ep, `60 s` stagger, `sem = 15`, `db = 3 ms`) compared against its interleaved idle floor (`db = 0 ms`): median (`p50`), mean, `p95`, `p99`, and Primary Error % |
-| 2. Effect of load shape, endpoint count, and semaphore | Staggered vs burst comparisons (`stg60` vs `burst`), `sem-sweep` (`5, 30, 50`), `burst-sem` (`5, 15, 50`), and `ep-sweep` (`25, 100, 250`), broken down by Pings 1–4 vs Ping 5 and canary max |
+| 2. Effect of load shape, endpoint count, and semaphore | Staggered vs burst comparisons (`stg60` vs `burst`), `sem-sweep` (`5, 30, 50`), `burst-sem` (`5, 15, 50`), and `ep-sweep` (`25, 100, 250`), broken down by Pings 1 to 4 vs Ping 5 and canary max |
 | 3. How Go and Rust compare to Python (`asyncio`) under the same load | 6-way staggered comparisons (Tables 1.1, 1.4, 3.4) and single-core vs multi-core burst comparisons (Tables 2.3, 2.4, 3.1, 3.2, 3.3), directly benchmarking Go and Rust against the Python baseline |
 | 4. What offloading gains and costs (`py-mc` vs `py-sc`) | Packet intrusion median/tail vs idle floor, event-loop canary reduction, and `ipc_ms` offload overhead (Table 1.3, Table 3.3) |
 | 5. Practical implications for Ephemres and monitoring platforms (hardware scaling & runtime trade-offs) | Cross-table synthesis of idle floors (Table 1.2), single-core vs multi-core scaling (Tables 1.4, 3.3), and runtime advantages/disadvantages across Python, Go, and Rust (§R4 Questions 3 & 5) |
@@ -318,7 +318,7 @@ Full reference tables for every comparison-table row group, best/worst (▼/▲)
 | **NIC interrupts on the probe core** | IRQ processing and the probe could compete on one CPU | recorded in `.meta.json` and verified via `/proc/interrupts` and `effective_affinity_list`; steer NIC IRQs away from the probe core if needed |
 | **Interrupt coalescing** | the NIC batches interrupts, delaying Clock A | affects kernel RTT, not observer lag; recorded via `ethtool -c` |
 | **Drift during a session or a day** | host baseline speed can shift between morning, afternoon, and evening sessions | rotate engine order every round and record interleaved idle floors (`Idle floor every round`) immediately before each test |
-| **Small repeat counts (2–3 repeats)** | 2–3 repeats cannot prove small microsecond differences at `p < 0.05` | require non-overlapping min–max ranges, report full repeat spreads, and use 5 repeats (`p = 0.008`) for formal statistical claims |
+| **Small repeat counts (2 or 3 repeats)** | 2 or 3 repeats cannot prove small microsecond differences at `p < 0.05` | require non-overlapping min-to-max ranges, report full repeat spreads, and use 5 repeats (`p = 0.008`) for formal statistical claims |
 | **Simulated ORM work** | a fixed `3.0 ms` CPU spin has no memory-allocation or GC pressure | isolates pure scheduler and event-loop contention; sweeping `simulated_db_ms` and testing allocation-heavy GC workloads are documented extensions |
 
 ## 7. What the instrumentation itself costs

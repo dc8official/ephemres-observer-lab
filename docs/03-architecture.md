@@ -1,6 +1,6 @@
 # 03 Architecture (Part 1): Harness, IPC Protocol and Process Isolation
 
-This page describes the complete two-tier architecture of the lab, how data flows between its tiers, and how runs start, end, and clean up after themselves. The architecture is documented across two companion files:
+This page covers the lab's two-tier architecture: how data flows between the tiers, and how runs start, end and clean up after themselves. It's split across two files:
 1. **Part 1 (Tier 1: Harness & Supervisory Architecture, this document):** Process isolation, the FastAPI dashboard, live event streaming, the NDJSON IPC protocol, run lifecycle, and fail-safe teardown, alongside a high-level overview of Tier 2.
 2. **Part 2 (Tier 2: Probing Engine Runtime Architecture, [04 Architecture (Part 2): Probing Engines](04-engines.md)):** Side-by-side implementation parity across the three measurement engines (Python, Go, Rust), raw socket multiplexing, dual-clock `cmsg` extraction, CPU core modes, and low-level runtime scheduler mechanics.
 
@@ -161,7 +161,7 @@ Tier 2 is the core measurement engine inside each probe subprocess. All three en
                   │   (5 pings @ 8 s interval across 60 s cycle window)    │
                   └──────────────────────────┬─────────────────────────────┘
                                              │
-                       Send Ping 1..5        │ (pings 1–5 sent on schedule)
+                       Send Ping 1..5        │ (pings 1 to 5 sent on schedule)
                        ─────────────────────▶│
                                              │
                                              ▼
@@ -291,6 +291,6 @@ The dashboard has no login. It runs as root (for raw sockets) and can send ICMP 
 * **Local only by default.** It listens on `127.0.0.1` and prints a warning if told otherwise.
 * **Same-origin requests only.** Every HTTP request and every WebSocket connection must carry a `Host` header naming the server. If a browser sends an `Origin`, it must equal the host. This stops other web pages open in your browser, and DNS-rebinding attacks, from driving the dashboard through your own browser. Scripts such as `curl` send no `Origin` and are allowed.
 * **Validated settings.** Run configuration is checked against these limits:
-  - 1–500 endpoints, 1–100 semaphore, 0–15 ms ORM, 0–600 s stagger;
-  - 0.05–30 s interval, 1–60 cycles, a cycle long enough for one cycle's pings;
-  - NIC hardware stamps only with Python, 1–32 IPv4 targets.
+  - 1 to 500 endpoints, 1 to 100 semaphore, 0 to 15 ms ORM, 0 to 600 s stagger;
+  - 0.05 to 30 s interval, 1 to 60 cycles, a cycle long enough for one cycle's pings;
+  - NIC hardware stamps only with Python, 1 to 32 IPv4 targets.

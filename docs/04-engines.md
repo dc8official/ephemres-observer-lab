@@ -1,6 +1,6 @@
 # 04 Architecture (Part 2): Probing Engines (Python, Go and Rust)
 
-This document is **Part 2 of the System Architecture** (companion to [03 Architecture (Part 1): Harness, IPC Protocol and Process Isolation](03-architecture.md)) and specifies the **Tier 2 Probing Engine Runtime Architecture**. All three engines implement the exact same lab mechanics (see the fairness rules in [02 Test methodology](02-test-methodology.md)), ensuring that any difference in observed measurement distortion can be attributed to runtime scheduler, event-loop, and memory-management design rather than implementation discrepancies. Terms are defined in the [glossary](../README.md#glossary).
+This is **part 2 of the architecture** (part 1 is [03 Architecture (Part 1): Harness, IPC Protocol and Process Isolation](03-architecture.md)) and covers the **Tier 2 probing engines**. All three engines implement the same lab mechanics (see the fairness rules in [02 Test methodology](02-test-methodology.md)), so that a difference in measured distortion can be put down to how each runtime schedules work and manages memory, not to differences in the implementations. Terms are defined in the [glossary](../README.md#glossary).
 
 Each engine opens the same raw ICMP socket, sends the same packets on the same schedule, reads the same kernel timestamp, and performs the same simulated work. The only intended difference is *how the language runtime executes concurrent tasks and handles CPU contention*:
 - **Python:** runs all coroutines on a single-threaded cooperative event loop (`asyncio`), with optional multi-core process offloading.
@@ -92,7 +92,7 @@ When the stamp is missing or refused:
 
 ## Runtime scheduler and timer mechanics
 
-Each language runtime schedules timers, I/O readiness callbacks, and runnable tasks differently. Understanding these architectural mechanics is essential when interpreting the empirical measurements in [10 Empirical Results and Comparative Analysis](10-results-analysis.md):
+Each runtime schedules timers, I/O readiness callbacks and runnable tasks differently, and that's the background you need to read the measurements in [10 Empirical Results and Comparative Analysis](10-results-analysis.md). A caution first: this section describes how the runtimes are designed and documented to behave. Where docs/10 ties a measured effect to one of these mechanisms (Go's run-queue ordering, tokio's poll budget, tokio's work-stealing delay), it marks the link as a *hypothesis*, because no run tested the mechanism directly.
 
 * **Go (`GOMAXPROCS=1`) run-queue ordering and timer-woken goroutines.**
   - Under `GOMAXPROCS=1`, all runnable goroutines share a single logical processor (`P`). When many endpoint goroutines complete their final ping simultaneously and contend for the semaphore and CPU spin, newly runnable goroutines woken by a timer (such as the 10 ms scheduler canary or an outbound ping slot) can queue behind the full batch of runnable endpoint goroutines rather than preempting to the front of the queue.
@@ -105,13 +105,13 @@ Each language runtime schedules timers, I/O readiness callbacks, and runnable ta
   - However, `tokio`'s single-thread scheduler periodically polls its I/O driver (`epoll`) after a fixed task poll budget (cooperative scheduling quantum), allowing the `AsyncFd` socket reader task to drain queued replies earlier than the end of the entire semaphore batch.
   - In `new_multi_thread()`, tasks are distributed across worker threads with work-stealing, though a task or reader assigned to a worker currently executing an inline spin can still experience a single spin's worth of delay before work-stealing or the next poll boundary intervenes.
 * **Rust (`tokio`) 1 ms timer wheel granularity.**
-  - `tokio`'s hierarchical timer wheel operates at a 1 ms tick resolution. Consequently, Rust's idle 10 ms canary and scheduled ping slots exhibit a baseline ~1 ms quantisation floor even when the CPU is completely idle. Always compare canary and send-lag *increases* under load across engines rather than raw idle levels.
+  - `tokio`'s hierarchical timer wheel operates at a 1 ms tick resolution. So Rust's idle 10 ms canary and its scheduled ping slots show a baseline of about 1 ms even when the CPU has nothing else to do. Compare canary and send-lag *increases* under load between engines, not raw idle levels.
 * **Python (`asyncio`) selector rounding, burst send loops, and `ProcessPoolExecutor` GIL contention.**
   - Python's `epoll` selector rounds timeout arguments to whole milliseconds, giving its idle canary a baseline of a few hundred microseconds.
   - Because `asyncio` executes all coroutines and socket callbacks sequentially in bytecode on a single thread, firing and draining 100 simultaneous endpoints in a burst (`stagger_window = 0 s`) incurs a multi-millisecond serial send/receive loop cost even when `simulated_db_ms = 0`.
   - In `multi_core` mode (`loop.run_in_executor` with `ProcessPoolExecutor`), offloading removes the inline CPU spin from the event loop thread, but `pickle` serialisation and pipe communication run on helper threads inside the main process that contend with the `asyncio` event loop for the Global Interpreter Lock (GIL), and jobs exceeding the worker count (`CPUs − 1`) queue for a free worker.
 * **Host CPU C-state wake-up latency vs. active load.**
-  - On hosts where deep processor idle states (`C-states`) are enabled, an unloaded core during an idle floor (`simulated_db_ms = 0`) can enter deeper sleep states between packets and take longer to wake on a NIC interrupt than a core kept in `C0` by periodic CPU work. How these runtime and hardware mechanisms manifest across our 173 recorded runs is evaluated in [10 Results analysis](10-results-analysis.md) (§R1–§R3).
+  - On hosts where deep processor idle states (`C-states`) are enabled, an unloaded core during an idle floor (`simulated_db_ms = 0`) can enter deeper sleep states between packets and take longer to wake on a NIC interrupt than a core kept in `C0` by periodic CPU work. How these runtime and hardware mechanisms show up across the 173 recorded runs is evaluated in [10 Results analysis](10-results-analysis.md) (§R1 to §R3).
 
 ## Building the compiled engines
 
