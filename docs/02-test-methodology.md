@@ -89,7 +89,7 @@ The dashboard starts from the configuration of the system being modelled. An unt
 | reply timeout | 2 s | lab default |
 | stagger window, cycle length | 60 s, 60 s | Ephemres: each endpoint starts at a second 0–59 of a 60 s slot |
 | cycles | 3 | Ephemres runs continuously; 3 gives two steady-state cycles after the warm-up |
-| `db_write_semaphore` | 15 | Ephemres production default (tuned from 4 to 15 specifically to improve ICMP measurement accuracy; swept at 5, 15, 30, 50) |
+| `db_write_semaphore` | 15 | Ephemres production default (raised from 4, expected to improve ICMP measurement accuracy; swept at 5, 15, 30, 50, with no measurable effect under a 60 s stagger: [10](10-results-analysis.md) §R2.1) |
 | simulated ORM work | 3 ms | the lab's estimate of Ephemres' post-cycle CPU work |
 
 With these values about 53 endpoints are in the middle of a cycle at any moment (100 × 32 s / 60 s). The old lab defaults (1 s interval, 30 s window) gave about 13, so contention is now far closer to the real system. The command-line runner keeps its own flag defaults (1 s interval, one cycle) for quick checks.

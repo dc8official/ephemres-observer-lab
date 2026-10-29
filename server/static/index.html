@@ -460,13 +460,13 @@
     <p><b>The origin:</b> While operating Ephemres (the parent monitoring platform) on deployed Linux machines, manual command-line <code>ping</code>
       tests from the terminal showed steady, low round-trip times, while the Ephemres application on the same machine reported a slight, regular RTT
       discrepancy and periodic tail-latency spikes. Ephemres was originally designed and tested inside a <b>GNS3 simulated network environment</b> on
-      single-core (1 vCPU) Debian/Ubuntu machines, and as it grew, the most effective update specifically for improving ICMP accuracy was raising its
-      database-write semaphore from <b>4 to 15</b>. Before prematurely substituting Go or Rust into a working Python codebase, this lab was built to
+      single-core (1 vCPU) Debian/Ubuntu machines, and as it grew, its database-write semaphore was raised from <b>4 to 15</b> in the
+      expectation of better ICMP accuracy (this lab later found no measurable effect from the semaphore under the 60 s stagger). Before prematurely substituting Go or Rust into a working Python codebase, this lab was built to
       measure the observer effect on <b>every packet</b> across runtimes, CPU core modes, and semaphore sizes.</p>
     <p>It answers five questions:</p>
     <ol>
       <li>How large is the distortion for a single-threaded <code>asyncio</code> monitor (Ephemres' 1-vCPU baseline design) under realistic database-write load?</li>
-      <li>How does it change with the load: burst or staggered starts, endpoint count, semaphore size (testing the 4 → 15 tuning across 5, 15, 30, 50), and post-cycle CPU work?</li>
+      <li>How does it change with the load: burst or staggered starts, endpoint count, semaphore size (testing the 4 → 15 change across 5, 15, 30, 50), and post-cycle CPU work?</li>
       <li>How do Go (goroutines) and Rust (tokio) compare to Python (<code>asyncio</code>) under the same load, pinned to one core and free to use all cores?</li>
       <li>What does Python gain, and what does it pay, when it moves the CPU work to <b>worker processes</b> (Python multi-core)?</li>
       <li>How do schedule design, hardware scaling, and language runtime each relate to the observer error measured here, for Ephemres and for monitoring platforms with a similar asynchronous probing architecture?</li>
@@ -611,7 +611,7 @@
         with the shaded bands: if they still do, the hand-over itself is what delays the replies.</li>
     </ul>
     <div class="callout warn"><b>Pool size versus semaphore.</b> The pool has one worker per CPU minus one (7 on an 8-CPU machine), while the
-      Ephemres semaphore (expanded in production from <code>4</code> to <code>15</code> specifically to improve ICMP accuracy) lets 15 endpoints into the
+      Ephemres semaphore (raised in production from <code>4</code> to <code>15</code>) lets 15 endpoints into the
       database step at once. The extra jobs queue for a worker, so with the Ephemres defaults the offload overhead under burst includes <i>waiting for a
       worker</i>, not only the copying. To measure the pure hand-over cost, run a variation with <code>db_write_semaphore</code> at or below the pool size
       (e.g. 7), and say so in the note.</div>
@@ -1826,7 +1826,7 @@ const CONTROLS = [
    what: "How many simulated monitored devices run at once. Each has its own ICMP identifier, so hundreds can share one target. More endpoints = more work competing for the engine's attention."},
   {id: "stagger", name: "Stagger window", section: "Run configuration", def: "60 s", range: "0-120 s on the slider (API: 0-600 s); 0 = burst", eph: "60 s (each endpoint starts at a second 0-59)", role: "must match",
    what: "Endpoint i of N starts at window × i / N seconds. 0 = burst: every endpoint at once, the worst case, which can also overload the target and change the real RTT."},
-  {id: "semaphore", name: "db_write_semaphore", section: "Run configuration", def: "15", range: "1-100", eph: "15 (tuned from 4 for ICMP accuracy)", role: "must match",
+  {id: "semaphore", name: "db_write_semaphore", section: "Run configuration", def: "15", range: "1-100", eph: "15 (raised from 4)", role: "must match",
    what: "The most endpoints allowed in the database-write step at the same moment. On one thread their CPU work runs back to back, so the worst stall is about semaphore × simulated DB work (15 × 3 ms = 45 ms)."},
   {id: "dbms", name: "Simulated DB work", section: "Run configuration", def: "3 ms", range: "0-15 ms in 0.5 ms steps", eph: "3 ms (the lab's estimate)", role: "must match",
    what: "Milliseconds of CPU spent preparing each endpoint's database write (statistics, state machine, ORM objects). It keeps the thread busy, so other endpoints' replies wait. 0 = none: that is the idle floor."},

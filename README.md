@@ -45,7 +45,7 @@ python3 verify_analysis.py
 
 | Document | Contents |
 |---|---|
-| [00 Research background](docs/00-research-background.md) | Origin of the research (field discovery of terminal ping vs. app RTT discrepancy, GNS3 1-core legacy, semaphore 4→15 ICMP accuracy tuning), internal vs. external observer effects, theoretical framework, core vs. extended literature review, and hypotheses |
+| [00 Research background](docs/00-research-background.md) | Origin of the research (field discovery of terminal ping vs. app RTT discrepancy, GNS3 1-core legacy, the semaphore 4→15 change and what the lab found about it), internal vs. external observer effects, theoretical framework, core vs. extended literature review, and hypotheses |
 | [01 Project scope](docs/01-project-scope.md) | Core research questions, in-scope and out-of-scope boundaries, and design constraints |
 | [02 Test methodology](docs/02-test-methodology.md) | Measurement model, workload defaults, metric definitions and formulas, statistical replication rules, and threats to validity |
 | [03 Architecture (Part 1: Harness)](docs/03-architecture.md) | Two-tier system architecture (Part 1): Tier 1 Harness (supervisor, NDJSON IPC, analysis, lifecycle) and high-level Tier 2 overview |
@@ -92,7 +92,7 @@ docs/                        Project documentation (00 through 10)
 | **Virtual endpoint** | A simulated monitored device assigned a distinct ICMP identifier (`0x1000 + i`), allowing up to 500 concurrent endpoints to share one raw socket and one or more target IPs. |
 | **Cycle** | One endpoint's repeating unit of work: sending `pings` (5 by default) at `interval` (8 s by default), followed by acquiring the semaphore and executing the post-cycle database write. |
 | **ORM work** | The synchronous CPU work performed after an endpoint's pings complete (statistics, state-machine evaluation, ORM object construction, and SQL parameter serialisation), simulated as a deterministic CPU spin (`3.0 ms` by default). |
-| **Semaphore (`db_write_semaphore`)** | Concurrency limiter (15 by default, expanded from 4 in Ephemres specifically to improve ICMP measurement accuracy) capping how many endpoints may execute their post-cycle database write simultaneously. |
+| **Semaphore (`db_write_semaphore`)** | Concurrency limiter (15 by default; raised from 4 in Ephemres in the expectation that it would improve ICMP measurement accuracy, though the lab found no measurable effect under the 60 s stagger) capping how many endpoints may execute their post-cycle database write simultaneously. |
 | **Staggered / burst** | Schedule shapes: *staggered* spreads endpoint start offsets evenly across `stagger_window` (60 s by default); *burst* (`0 s`) starts all endpoints at the exact same instant. |
 | **Idle floor** | A baseline control run with identical probing parameters but `simulated_db_ms = 0.0`, measuring the runtime's inherent wake-up and socket-read cost without ORM work. |
 | **Canary** | A background task that sleeps in 10 ms ticks and records wake-up lateness (`elapsed − 10 ms`), measuring scheduler starvation independently of network traffic. |

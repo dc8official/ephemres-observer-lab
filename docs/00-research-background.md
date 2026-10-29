@@ -20,13 +20,13 @@ When Ephemres was first built, it was designed to run reliably on a **single-cor
 
 Because virtualised nodes in GNS3 share host CPU time under tight limits, keeping the monitor fast on a single core was a hard constraint from day one. As Ephemres grew, we needed to know how multi-core CPUs affect these runtimes while keeping single-core performance intact.
 
-### What Ephemres already does right (and the 4 → 15 semaphore tuning)
+### What Ephemres already does right (and the 4 → 15 semaphore change)
 An audit of the Ephemres engine code (`monitoring/engine.py`, `monitoring/ping.py`, `monitoring/state_machine.py`) confirmed that the platform already removes the obvious sources of self-interference:
 
 1. **Process isolation.** The probing engine runs as its own service, separate from the web API workers.
 2. **Measure first, save later.** Each endpoint cycle is 5 pings sent 8 s apart: about 32 s normally, 42 s in the worst case where pings time out. Database writes happen only after all 5 pings finish, in the spare time before the endpoint's next 60 s slot.
 3. **Deterministic staggering.** Each endpoint gets its own start second (0–59), derived from its UUID, so endpoints do not all start together.
-4. **Capped concurrency (the 4 → 15 ICMP accuracy optimisation).** Post-cycle database writes pass through an asynchronous semaphore (`db_write_semaphore`), which limits how many run at once. In early versions of Ephemres, this semaphore was set to **4**. As the monitored deployment grew, expanding the semaphore from **4 to the current 15** was the single most effective performance update **specifically for improving ICMP measurement accuracy**, allowing post-cycle writes to clear with higher concurrency so fewer endpoints backed up behind the queue.
+4. **Capped concurrency (the 4 → 15 semaphore change).** Post-cycle database writes pass through an asynchronous semaphore (`db_write_semaphore`), which limits how many run at once. In early versions of Ephemres, this semaphore was set to **4**. As the monitored deployment grew, it was raised from **4 to the current 15**, in the firm expectation that letting post-cycle writes clear with higher concurrency would leave fewer endpoints backed up behind the queue and so **improve ICMP measurement accuracy**. Readings did improve after that release. This lab later showed that under the 60 s stagger the cap is almost never reached, so the semaphore was unlikely to be the cause; other improvements to the Ephemres code are the more likely explanation ([10 Results analysis](10-results-analysis.md) §R2.1).
 5. **Lean receive path.** One raw ICMP socket, watched by `loop.add_reader()`, reads packets into a preallocated 1500-byte buffer (`recvfrom_into`) and stamps `time.monotonic_ns()` immediately.
 6. **Cycle aggregation.** Five pings collapse into one summary database insert per cycle.
 
@@ -44,7 +44,7 @@ Early reading pointed to Python's single-threaded `asyncio` event loop and CPyth
 
 In Ephemres, however, Python already worked well. Replacing a working Python codebase with Go or Rust on a hunch would have been bad engineering. Before touching production code, we needed to test the problem directly:
 - How large is the internal observer effect in Python `asyncio` under Ephemres's real probing schedule?
-- Why did raising the semaphore from 4 to 15 help, and what happens at 5, 15, 30, or 50?
+- Did raising the semaphore from 4 to 15 actually improve accuracy, and what happens at 5, 15, 30, or 50?
 - How do Go (`goroutines`) and Rust (`tokio`) compare against the current Python (`asyncio`) engine under the same load, both on a **single core** (matching the original GNS3 1-vCPU constraint) and on **multi-core CPUs**?
 - Does offloading Python's CPU work to a multi-core `ProcessPoolExecutor` solve the problem without switching languages?
 - What do these results mean in practice for Ephemres (and any other monitoring platform built on a similar architecture) when weighing schedule design, hardware scaling, and runtime trade-offs (Python vs. Go vs. Rust)?
@@ -146,7 +146,7 @@ The lab compares three runtimes under two CPU arrangements:
 
 ### Key experimental dimensions
 - **Single-core vs. multi-core CPU modes:** Single-core mode tests the original Ephemres design constraint (running smoothly on a 1-vCPU virtual machine in GNS3), while multi-core mode tests how each runtime uses modern multi-core hardware.
-- **Semaphore sweep (`5, 15, 30, 50`):** Directly tests the production tuning update where raising `db_write_semaphore` from 4 to 15 improved Ephemres's ICMP accuracy, checking whether smaller or larger concurrency limits reduce or worsen observer lag.
+- **Semaphore sweep (`5, 15, 30, 50`):** Directly tests the production change that raised `db_write_semaphore` from 4 to 15 in the expectation of better ICMP accuracy, checking whether smaller or larger concurrency limits reduce or worsen observer lag.
 - **Schedule shape (`60 s` staggered vs. `0 s` burst):** Separates normal staggered operation from worst-case simultaneous arrival and write bursts.
 - **Idle floor (`0 ms` vs. `3 ms` ORM work):** Measures each runtime's inherent wake-up and socket-read cost without post-cycle CPU work.
 
@@ -182,12 +182,12 @@ All academic entries were checked against Crossref (DOI given), ACM/IEEE proceed
 
 ### Core literature: host measurement error, async runtimes, and GC latency
 1. W. de Bruijn, "SO_TIMESTAMPING: Powering Fleetwide RPC Monitoring", *Proc. Netdev 0x17* (2023).
-2. A. Pásztor, D. Veitch, "PC Based Precision Timing Without GPS", *Proc. ACM SIGMETRICS '02*, ACM, 352-362 (2002). doi:10.1145/511334.511378
+2. A. Pásztor, D. Veitch, "PC Based Precision Timing Without GPS", *Proc. ACM SIGMETRICS '02*, ACM, 1-10 (2002). doi:10.1145/511334.511336
 3. A. Pásztor, D. Veitch, "A Precision Infrastructure for Active Probing", *Proc. PAM 2001* (2001).
 4. T. Holterbach, C. Pelsser, R. Bush, L. Vanbever, "Quantifying Interference between Measurements on the RIPE Atlas Platform", *Proc. Internet Measurement Conference (IMC)*, ACM, 437-443 (2015). doi:10.1145/2815675.2815710
 5. W. Li, D. Wu, R. K. C. Chang, R. K. P. Mok, "Toward Accurate Network Delay Measurement on Android Phones", *IEEE Transactions on Mobile Computing* 17(3), 717-732 (2018). doi:10.1109/TMC.2017.2737990
-6. J. Sommers, P. Barford, N. Duffield, A. Ron, "Accurate and Efficient SLA Compliance Monitoring", *Proc. ACM SIGCOMM '07*, ACM, 109-120 (2007). doi:10.1145/1282380.1282393
-7. J. Sommers, P. Barford, N. Duffield, A. Ron, "Improving Accuracy in End-to-End Packet Loss Measurement", *Proc. ACM SIGCOMM '05*, ACM, 157-168 (2005). doi:10.1145/1080091.1080110
+6. J. Sommers, P. Barford, N. Duffield, A. Ron, "Accurate and Efficient SLA Compliance Monitoring", *Proc. ACM SIGCOMM '07*, ACM, 109-120 (2007). doi:10.1145/1282380.1282394
+7. J. Sommers, P. Barford, N. Duffield, A. Ron, "Improving Accuracy in End-to-End Packet Loss Measurement", *Proc. ACM SIGCOMM '05*, ACM, 157-168 (2005). doi:10.1145/1080091.1080111
 8. J. Dean, L. A. Barroso, "The Tail at Scale", *Communications of the ACM* 56(2), 74-80 (2013). doi:10.1145/2408776.2408794
 9. P. Galindo Salgado, "Time to take out the rubbish: garbage collector", *PyCon US 2019*, Python Software Foundation, Cleveland, OH (2019).
 10. C. Wu, M. Ni (Instagram Engineering), "Dismissing Python Garbage Collection at Instagram", *Instagram Engineering Blog*, Meta (Jan. 2017).
