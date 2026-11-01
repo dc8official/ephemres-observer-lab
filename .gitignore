@@ -1,0 +1,20 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Compiled workers: rebuilt by ./build_workers.sh
+bin/
+workers/rust_prober/target/
+
+# Soft-deleted runs (restorable trash from the dashboard)
+test_results/.deleted/
+
+# Local secrets / editor / OS
+.env
+.env.*
+.claude/
+.vscode/
+.idea/
+.DS_Store
